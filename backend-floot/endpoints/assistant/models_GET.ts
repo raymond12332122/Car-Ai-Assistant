@@ -18,7 +18,7 @@ export async function handle(_request: Request) {
   const body: OutputType = {
     defaultModel: preferred?.id ?? models.find((m) => m.available)?.id ?? null,
     models,
-    voiceAvailable: configured.openai,
+    voiceAvailable: configured.openai || configured.google,
   };
   return new Response(superjson.stringify(body), {
     headers: { "Content-Type": "application/json" },

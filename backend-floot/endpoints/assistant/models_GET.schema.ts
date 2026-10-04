@@ -11,7 +11,7 @@ export type OutputType = {
     /** False when the provider's API key is not connected yet. */
     available: boolean;
   }>;
-  /** Voice from the car microphone needs OpenAI transcription. */
+  /** Voice from the car microphone needs OpenAI or Gemini transcription. */
   voiceAvailable: boolean;
 };
 

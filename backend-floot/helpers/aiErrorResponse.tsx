@@ -1,6 +1,7 @@
 import superjson from "superjson";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { ApiError as GeminiApiError } from "@google/genai";
 import { ZodError } from "zod";
 import { ProviderNotConfiguredError } from "./carAssistant";
 
@@ -20,12 +21,24 @@ export function aiErrorResponse(error: unknown): Response {
   }
 
   const provider =
-    error instanceof Anthropic.APIError ? "Claude" : error instanceof OpenAI.APIError ? "OpenAI" : null;
+    error instanceof Anthropic.APIError
+      ? "Claude"
+      : error instanceof OpenAI.APIError
+        ? "OpenAI"
+        : error instanceof GeminiApiError
+          ? "Gemini"
+          : null;
   if (provider) {
     const status = (error as { status?: number }).status ?? 502;
     console.error(`${provider} API error`, status, (error as Error).message);
     if (status === 401 || status === 403) {
       return respond(502, { error: `La llave de ${provider} no es válida o no tiene permiso.`, code: "INVALID_KEY" });
+    }
+    if (status === 429 && provider === "Gemini") {
+      return respond(429, {
+        error: "Llegaste al límite gratis de Gemini por ahora. Espera un minuto o elige otro modelo.",
+        code: "RATE_LIMITED",
+      });
     }
     if (status === 429) {
       return respond(429, {

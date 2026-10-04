@@ -3,8 +3,21 @@
  * every client (web, Flutter, Android Auto mirror these ids).
  */
 export const assistantModels = {
-  defaultModel: "claude-opus-5-5",
+  // Gemini has a free tier, so it is the default until paid keys have credit.
+  defaultModel: "gemini-flash-lite-latest",
   list: [
+    {
+      id: "gemini-flash-lite-latest",
+      provider: "google",
+      label: "Gemini Flash Lite",
+      note: "Gratis, rápido (recomendado)",
+    },
+    {
+      id: "gemini-3.8-flash",
+      provider: "google",
+      label: "Gemini 3.8 Flash",
+      note: "Gratis pero solo ~20 consultas al día; más listo",
+    },
     {
       id: "claude-opus-5-5",
       provider: "anthropic",

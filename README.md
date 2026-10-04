@@ -21,9 +21,11 @@ y responde clima, tráfico o cualquier pregunta — todo con respuestas cortas h
  Android Auto (Kotlin)├──► https://copiloto-car-ai.floot.app/_api/assistant/chat   (texto)
  UI web / WebView ────┘                                   /_api/assistant/voice  (audio WAV/WebM)
                                 │
-                                ├─ Claude (API de Anthropic, tu llave)  ─┐ modelo seleccionable
-                                ├─ ChatGPT (API de OpenAI, tu llave)    ─┘ (con búsqueda web)
-                                ├─ OpenAI gpt-4o-mini-transcribe (voz del auto → texto)
+                                ├─ Gemini (Google AI Studio, GRATIS)   ─┐
+                                ├─ Claude (API de Anthropic, tu llave)  ├ modelo seleccionable
+                                ├─ ChatGPT (API de OpenAI, tu llave)    ─┘
+                                ├─ Voz del auto → texto: Gemini Flash Lite (u OpenAI si hay llave)
+                                ├─ Open-Meteo (clima, gratis, sin llave)
                                 ├─ OpenStreetMap Overpass  (lugares cercanos, gratis, sin llave)
                                 └─ OpenStreetMap Nominatim (direcciones / destinos)
 ```
@@ -52,8 +54,8 @@ Respuesta (formato superjson, el contenido está en `json`):
 }}
 ```
 
-Campo opcional `"model"`: `claude-opus-5-5` (predeterminado), `claude-sonnet-5-5`, `claude-haiku-4-5`,
-`gpt-6-luna` o `gpt-6.1-sol`. `GET /_api/assistant/models` lista los modelos y cuáles tienen llave conectada.
+Campo opcional `"model"`: `gemini-flash-lite-latest` (predeterminado, gratis), `gemini-3.8-flash`,
+`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-4-5`, `gpt-6-luna` o `gpt-6.1-sol`. `GET /_api/assistant/models` lista los modelos y cuáles tienen llave conectada.
 
 `action.type` puede ser `none`, `navigate` (con `lat`/`lng` del destino), `show_places` o `call`.
 
@@ -109,10 +111,11 @@ edítalo en Floot y vuelve a publicar.
 - `endpoints/assistant/*` — endpoints públicos `chat` y `voice`.
 - `pages/_index.tsx` — UI web (modo oscuro, micrófono grande, accesos rápidos).
 
-### Llaves de API (Claude y ChatGPT)
+### Llaves de API
 
 La IA usa **tus propias llaves**, conectadas en Floot (nunca en el código):
 
+- `GEMINI_API_KEY` — **gratis**, https://aistudio.google.com/apikey (sin tarjeta). Es el modelo principal.
 - `ANTHROPIC_API_KEY` — https://console.anthropic.com → API Keys
 - `OPENAI_API_KEY` — https://platform.openai.com/api-keys (también se usa para transcribir la voz del auto)
 
@@ -120,6 +123,14 @@ La IA usa **tus propias llaves**, conectadas en Floot (nunca en el código):
 > La API se paga aparte, por uso, con saldo en cada consola. Para gastar lo menos posible elige
 > **Claude Haiku 4.5** o **GPT-6 Luna** en el selector de modelo; cada pregunta cuesta fracciones de centavo
 > (más si usa búsqueda web).
+
+**Límites del plan gratis de Gemini** (medidos en octubre 2026):
+
+- Gemini 3.8 Flash: solo **20 llamadas al día**; cada pregunta usa 2–3. Si se agota, Copiloto
+  cambia solo a Flash Lite.
+- Gemini Flash Lite: límite mucho más alto; es el predeterminado para chat y voz.
+- La búsqueda en Google (noticias, deportes) **no** está incluida en el plan gratis: Copiloto dice
+  que no puede consultarlo en vez de inventar. Lugares, navegación, clima y voz sí funcionan gratis.
 
 El modelo se elige en la app (chip arriba a la derecha), en la web (selector "Modelo") o en Android Auto
 (botón **Modelo**). Teléfono y auto comparten la misma elección.
@@ -134,4 +145,4 @@ Android Auto. Escribir solo está disponible en el teléfono, estacionado.
 - Publicar en Play Store: Google revisa las apps de Android Auto por categoría (esta usa
   **POI / puntos de interés**); funciones de chat libre podrían requerir ajustes para aprobarse.
 - Proteger los endpoints con una llave de app o límites por dispositivo antes de compartir el APK
-  públicamente (hoy cualquiera con la URL puede consumir créditos de IA).
+  públicamente (hoy cualquiera con la URL puede gastar tu cuota de IA).

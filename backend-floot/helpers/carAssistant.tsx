@@ -1,5 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI, { toFile } from "openai";
+import {
+  GoogleGenAI,
+  FunctionCallingConfigMode,
+  ThinkingLevel,
+  type Content,
+  type Part,
+} from "@google/genai";
 import { geoServices, type PlaceCategory } from "./geoServices";
 import {
   assistantModels,
@@ -25,19 +32,30 @@ export class ProviderNotConfiguredError extends Error {
     super(
       provider === "anthropic"
         ? "Falta conectar la llave de Claude (ANTHROPIC_API_KEY)."
-        : "Falta conectar la llave de OpenAI (OPENAI_API_KEY).",
+        : provider === "openai"
+          ? "Falta conectar la llave de OpenAI (OPENAI_API_KEY)."
+          : "Falta conectar la llave de Gemini (GEMINI_API_KEY).",
     );
   }
 }
 
 function apiKey(provider: AssistantProvider): string | undefined {
+  const env = process.env as Record<string, string | undefined>;
   const key =
-    provider === "anthropic" ? process.env["ANTHROPIC_API_KEY"] : process.env["OPENAI_API_KEY"];
-  return key && key.trim() ? key : undefined;
+    provider === "anthropic"
+      ? env["ANTHROPIC_API_KEY"]
+      : provider === "openai"
+        ? env["OPENAI_API_KEY"]
+        : env["GEMINI_API_KEY"];
+  return key && key.trim() ? key.trim() : undefined;
 }
 
 function configuredProviders(): Record<AssistantProvider, boolean> {
-  return { anthropic: !!apiKey("anthropic"), openai: !!apiKey("openai") };
+  return {
+    anthropic: !!apiKey("anthropic"),
+    openai: !!apiKey("openai"),
+    google: !!apiKey("google"),
+  };
 }
 
 function anthropicClient() {
@@ -50,6 +68,12 @@ function openaiClient() {
   const key = apiKey("openai");
   if (!key) throw new ProviderNotConfiguredError("openai");
   return new OpenAI({ apiKey: key, maxRetries: 1, timeout: 90_000 });
+}
+
+function geminiClient() {
+  const key = apiKey("google");
+  if (!key) throw new ProviderNotConfiguredError("google");
+  return new GoogleGenAI({ apiKey: key });
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +133,19 @@ const NEARBY_DESCRIPTION =
   "Find real places near the driver's current GPS position (OpenStreetMap). Use for gas stations, EV chargers, food, parking, hospitals, pharmacies, ATMs, workshops, hotels, etc.";
 const DESTINATION_DESCRIPTION =
   "Look up the coordinates of an address, city, landmark or business by name, so the driver can navigate there.";
+const WEATHER_DESCRIPTION =
+  "Current weather and today's/tomorrow's forecast. Uses the driver's GPS unless a place name is given.";
+const WEATHER_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["place"],
+  properties: {
+    place: {
+      type: ["string", "null"],
+      description: "City or place name for another location; null for the driver's current position.",
+    },
+  },
+};
 
 function buildInstructions(params: {
   surface: Surface;
@@ -133,7 +170,7 @@ function buildInstructions(params: {
     `Always answer in the user's language; default locale ${params.language}.`,
     driving,
     "Safety first: never encourage reading, typing or watching video while driving; suggest pulling over for anything long. Never invent places, prices or opening hours.",
-    "For places near the driver, call search_nearby_places. For a named destination, call find_destination. For news, weather, traffic info, sports, prices or general facts, use web search (at most once or twice).",
+    "For places near the driver, call search_nearby_places. For a named destination, call find_destination. For weather, call get_weather. For news, traffic info, sports, prices or other current facts, use web search (at most once or twice).",
     "Actions: when the user wants to go somewhere specific, set action.type='navigate' with destinationName, lat, lng (from tool results). When you list nearby options, set action.type='show_places' (the app shows the cards), mention the closest 2-3 by name and distance. To phone a place, action.type='call' with phone. Otherwise 'none' with nulls.",
     "Distances: use km with one decimal above 1 km, meters below. No markdown, no URLs, no emojis in `speech`.",
     params.finalStep,
@@ -180,6 +217,19 @@ async function runTool(
         language: ctx.language,
       });
       return { result: places.length ? places : { results: [] }, places };
+    }
+    if (name === "get_weather") {
+      let point = ctx.location ? { lat: ctx.location.lat, lng: ctx.location.lng } : null;
+      let placeName: string | null = null;
+      if (args.place) {
+        const [found] = await geoServices.geocode({ query: String(args.place), near: null, language: ctx.language });
+        if (found) {
+          point = { lat: found.lat, lng: found.lng };
+          placeName = found.address;
+        }
+      }
+      if (!point) return { result: { error: "Location unavailable. Ask for a city name." }, places: [] };
+      return { result: { place: placeName ?? "driver location", ...(await geoServices.weather(point)) }, places: [] };
     }
     return { result: { error: `Unknown tool ${name}` }, places: [] };
   } catch (err) {
@@ -228,6 +278,12 @@ async function runClaude(ctx: RunContext): Promise<FinalAnswer> {
       description: DESTINATION_DESCRIPTION,
       strict: true,
       input_schema: DESTINATION_SCHEMA as any,
+    },
+    {
+      name: "get_weather",
+      description: WEATHER_DESCRIPTION,
+      strict: true,
+      input_schema: WEATHER_SCHEMA as any,
     },
     {
       name: "respond",
@@ -320,6 +376,13 @@ async function runOpenAI(ctx: RunContext): Promise<FinalAnswer> {
       strict: true,
       parameters: DESTINATION_SCHEMA,
     },
+    {
+      type: "function",
+      name: "get_weather",
+      description: WEATHER_DESCRIPTION,
+      strict: true,
+      parameters: WEATHER_SCHEMA,
+    },
   ];
   const instructions = ctx.instructions("Return the final answer in the required JSON format.");
   let input: any[] = ctx.messages.map((m) => ({ type: "message", role: m.role, content: m.content }));
@@ -365,6 +428,123 @@ async function runOpenAI(ctx: RunContext): Promise<FinalAnswer> {
     input = [...input, ...output, ...outputs];
   }
   throw new Error("The assistant could not finish the request.");
+}
+
+// ---------------------------------------------------------------------------
+// Gemini (Google AI Studio, free tier)
+// ---------------------------------------------------------------------------
+
+const GEMINI_UTILITY_MODEL = "gemini-3.8-flash";
+// Search grounding has its own (smaller) free quota per model; Flash Lite has the most.
+const GEMINI_SEARCH_MODEL = "gemini-flash-lite-latest";
+
+type GenerateParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
+
+/** generateContent with retries for Google's transient 500/503 "overloaded" errors. */
+async function geminiGenerate(client: GoogleGenAI, params: GenerateParams) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await client.models.generateContent(params);
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (attempt >= 2 || (status !== 500 && status !== 503)) throw err;
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+}
+
+// Gemini 2.5 can't mix Google Search grounding with function calling in one
+// request, so web search is a function served by a separate grounded call.
+async function geminiWebSearch(client: GoogleGenAI, query: string, language: string) {
+  const r = await geminiGenerate(client, {
+    model: GEMINI_SEARCH_MODEL,
+    contents: query,
+    config: {
+      systemInstruction: `Answer concisely with current facts. Language: ${language}.`,
+      tools: [{ googleSearch: {} }],
+    },
+  });
+  return { answer: r.text ?? "" };
+}
+
+async function runGemini(ctx: RunContext): Promise<FinalAnswer> {
+  const client = geminiClient();
+  const declarations = [
+    {
+      name: "web_search",
+      description: "Search the web for news, weather, traffic, sports, prices or general facts.",
+      parametersJsonSchema: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+    { name: "search_nearby_places", description: NEARBY_DESCRIPTION, parametersJsonSchema: NEARBY_SCHEMA },
+    { name: "find_destination", description: DESTINATION_DESCRIPTION, parametersJsonSchema: DESTINATION_SCHEMA },
+    { name: "get_weather", description: WEATHER_DESCRIPTION, parametersJsonSchema: WEATHER_SCHEMA },
+    {
+      name: "respond",
+      description:
+        "Deliver the final answer to the driver. Always finish every turn by calling this function exactly once.",
+      parametersJsonSchema: ANSWER_SCHEMA,
+    },
+  ];
+  const systemInstruction = ctx.instructions(
+    "When you have the answer, call the `respond` function with reply, speech and action. Do not write the answer as plain text.",
+  );
+  const contents: Content[] = ctx.messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+  let lastText = "";
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    // Last round: only allow `respond`, so the model must deliver an answer.
+    const finalRound = round === MAX_ROUNDS - 1;
+    const r = await geminiGenerate(client, {
+      model: ctx.model,
+      contents,
+      config: {
+        systemInstruction,
+        tools: [{ functionDeclarations: declarations }],
+        toolConfig: {
+          functionCallingConfig: finalRound
+            ? { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: ["respond"] }
+            : { mode: FunctionCallingConfigMode.AUTO },
+        },
+        temperature: 0.4,
+        // Gemini 3.x: low thinking keeps answers fast for a driver who waits.
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      },
+    });
+
+    const calls = r.functionCalls ?? [];
+    if (r.text) lastText = r.text;
+    const respond = calls.find((c) => c.name === "respond");
+    if (respond) return normalizeAnswer(respond.args as Partial<FinalAnswer>, lastText);
+    if (calls.length === 0) return normalizeAnswer(null, lastText);
+
+    const modelContent = r.candidates?.[0]?.content;
+    if (modelContent) contents.push(modelContent);
+    const responses: Part[] = [];
+    for (const call of calls) {
+      let result: unknown;
+      if (call.name === "web_search") {
+        try {
+          result = await geminiWebSearch(client, String((call.args as any)?.query ?? ""), ctx.language);
+        } catch (err) {
+          console.error("Gemini web search failed", err);
+          result = { error: "Web search is temporarily unavailable." };
+        }
+      } else {
+        const out = await runTool(call.name ?? "", call.args ?? {}, ctx);
+        if (out.places.length) ctx.onPlaces(out.places);
+        result = out.result;
+      }
+      responses.push({ functionResponse: { id: call.id, name: call.name, response: { result } } });
+    }
+    contents.push({ role: "user", parts: responses });
+  }
+  return normalizeAnswer(null, lastText);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,21 +601,60 @@ async function run(params: {
       }),
   };
 
-  const answer = provider === "anthropic" ? await runClaude(ctx) : await runOpenAI(ctx);
+  let usedModel: AssistantModelId = model;
+  let answer: FinalAnswer;
+  if (provider === "anthropic") {
+    answer = await runClaude(ctx);
+  } else if (provider === "openai") {
+    answer = await runOpenAI(ctx);
+  } else {
+    try {
+      answer = await runGemini(ctx);
+    } catch (err) {
+      // Free-tier quota for the chosen Gemini model ran out: fall back to Flash Lite.
+      const status = (err as { status?: number }).status;
+      if (status !== 429 || model === GEMINI_SEARCH_MODEL) throw err;
+      console.warn(`Gemini quota exhausted for ${model}; falling back to ${GEMINI_SEARCH_MODEL}`);
+      usedModel = GEMINI_SEARCH_MODEL;
+      answer = await runGemini({ ...ctx, model: GEMINI_SEARCH_MODEL });
+    }
+  }
   return {
     ...answer,
     places:
       answer.action.type === "show_places" || answer.action.type === "navigate" ? lastPlaces : [],
-    model,
+    model: usedModel,
   };
 }
 
-/** Speech-to-text with OpenAI (Claude has no transcription API). */
+/**
+ * Speech-to-text. Uses OpenAI when its key is connected, otherwise Gemini's
+ * free tier (Claude has no transcription API).
+ */
 async function transcribe(params: {
   audioBase64: string;
   mimeType: string;
   language: string;
 }): Promise<string> {
+  if (!apiKey("openai")) {
+    const r = await geminiGenerate(geminiClient(), {
+      // Flash Lite: separate (larger) free quota, so transcription doesn't eat the chat model's.
+      model: GEMINI_SEARCH_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: params.mimeType, data: params.audioBase64 } },
+            {
+              text: `Transcribe exactly what the speaker says (language ${params.language}). Output only the transcript. If there is no speech, output nothing.`,
+            },
+          ],
+        },
+      ],
+      config: { temperature: 0 },
+    });
+    return String(r.text ?? "").trim();
+  }
   const client = openaiClient();
   const ext =
     {

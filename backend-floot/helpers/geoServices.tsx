@@ -181,9 +181,68 @@ async function reverseGeocode(params: {
   }
 }
 
+// WMO weather interpretation codes (Open-Meteo) → short Spanish description.
+const WEATHER_CODES: Record<number, string> = {
+  0: "despejado",
+  1: "mayormente despejado",
+  2: "parcialmente nublado",
+  3: "nublado",
+  45: "niebla",
+  48: "niebla con escarcha",
+  51: "llovizna ligera",
+  53: "llovizna",
+  55: "llovizna intensa",
+  61: "lluvia ligera",
+  63: "lluvia",
+  65: "lluvia fuerte",
+  66: "lluvia helada",
+  67: "lluvia helada fuerte",
+  71: "nevada ligera",
+  73: "nevada",
+  75: "nevada fuerte",
+  80: "chubascos ligeros",
+  81: "chubascos",
+  82: "chubascos fuertes",
+  95: "tormenta eléctrica",
+  96: "tormenta con granizo",
+  99: "tormenta fuerte con granizo",
+};
+
+/** Current weather + today's forecast from Open-Meteo (free, no API key). */
+async function weather(params: { lat: number; lng: number }) {
+  const url = new URL("https://api.open-meteo.com/v1/forecast");
+  url.searchParams.set("latitude", String(params.lat));
+  url.searchParams.set("longitude", String(params.lng));
+  url.searchParams.set("current", "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation");
+  url.searchParams.set("daily", "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code");
+  url.searchParams.set("forecast_days", "2");
+  url.searchParams.set("timezone", "auto");
+  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`Open-Meteo error ${res.status}`);
+  const d = (await res.json()) as any;
+  const day = (i: number) => ({
+    condition: WEATHER_CODES[d.daily?.weather_code?.[i]] ?? null,
+    maxC: d.daily?.temperature_2m_max?.[i] ?? null,
+    minC: d.daily?.temperature_2m_min?.[i] ?? null,
+    rainChancePercent: d.daily?.precipitation_probability_max?.[i] ?? null,
+  });
+  return {
+    now: {
+      condition: WEATHER_CODES[d.current?.weather_code] ?? null,
+      temperatureC: d.current?.temperature_2m ?? null,
+      feelsLikeC: d.current?.apparent_temperature ?? null,
+      windKmh: d.current?.wind_speed_10m ?? null,
+      precipitationMm: d.current?.precipitation ?? null,
+    },
+    today: day(0),
+    tomorrow: day(1),
+  };
+}
+
 export const geoServices = {
   categories: Object.keys(PLACE_CATEGORIES) as PlaceCategory[],
   searchNearby,
   geocode,
   reverseGeocode,
+  weather,
 };
