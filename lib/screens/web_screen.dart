@@ -36,6 +36,12 @@ class _WebScreenState extends State<WebScreen> {
         try {
           final data = jsonDecode(msg.message) as Map<String, dynamic>;
           if (data['type'] == 'speak') widget.onSpeak(data['text'] as String? ?? '');
+          if (data['type'] == 'navigate' && data['lat'] is num && data['lng'] is num) {
+            NavigationLauncher.navigate(
+              (data['lat'] as num).toDouble(),
+              (data['lng'] as num).toDouble(),
+            );
+          }
         } catch (_) {}
       })
       ..setNavigationDelegate(NavigationDelegate(

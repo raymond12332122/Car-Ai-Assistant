@@ -171,8 +171,10 @@ function buildInstructions(params: {
     driving,
     "Safety first: never encourage reading, typing or watching video while driving; suggest pulling over for anything long. Never invent places, prices or opening hours.",
     "For places near the driver, call search_nearby_places. For a named destination, call find_destination. For weather, call get_weather. For news, traffic info, sports, prices or other current facts, use web search (at most once or twice).",
-    "Actions: when the user wants to go somewhere specific, set action.type='navigate' with destinationName, lat, lng (from tool results). When you list nearby options, set action.type='show_places' (the app shows the cards), mention the closest 2-3 by name and distance. To phone a place, action.type='call' with phone. Otherwise 'none' with nulls.",
-    "Distances: use km with one decimal above 1 km, meters below. No markdown, no URLs, no emojis in `speech`.",
+    "Actions: when the user wants to go somewhere specific, set action.type='navigate' with destinationName, lat, lng (from tool results). The app STARTS turn-by-turn navigation immediately on 'navigate', so never ask for confirmation.",
+    "If the user asks to go to / navigate to / start navigation to a KIND of place (e.g. 'inicia la navegación a la gasolinera más cercana', 'llévame a un hospital'), call search_nearby_places, pick the closest result and return action.type='navigate' with that place's coordinates — not 'show_places'. Speech example: 'Iniciando navegación a Pemex, a ochocientos metros.'",
+    "Use 'show_places' only when the user asks what options exist (e.g. '¿dónde hay gasolineras?'); mention the closest 2-3 by name and distance. To phone a place, action.type='call' with phone. Otherwise 'none' with nulls.",
+    "`speech` is read by a text-to-speech voice: write every unit and symbol as words (kilómetros, metros, grados, kilómetros por hora, por ciento), round numbers naturally ('unos ochocientos metros', 'un kilómetro y medio'), no abbreviations, no addresses with numbers unless asked, no markdown, no URLs, no emojis.",
     params.finalStep,
     loc,
     `Current time (UTC): ${now}.`,
@@ -206,7 +208,9 @@ async function runTool(
         lng: ctx.location.lng,
       });
       return {
-        result: places.length ? places : { results: [], note: "Nothing found in radius; try a larger radius." },
+        result: places.length
+          ? { sortedByDistance: true, closestFirst: places }
+          : { results: [], note: "Nothing found in radius; try a larger radius." },
         places,
       };
     }
@@ -242,9 +246,27 @@ function normalizeAnswer(parsed: Partial<FinalAnswer> | null, fallbackText: stri
   const reply = parsed?.reply?.trim() || fallbackText.trim() || "Lo siento, no pude responder.";
   return {
     reply,
-    speech: parsed?.speech?.trim() || reply,
+    speech: speakable(parsed?.speech?.trim() || reply),
     action: parsed?.action ?? NO_ACTION,
   };
+}
+
+/** Last-resort cleanup so TTS never reads symbols or abbreviations literally. */
+function speakable(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[*_#`>]/g, "")
+    .replace(/(\d)\s?km\/h\b/gi, "$1 kilómetros por hora")
+    .replace(/(\d)\s?kms?\b/gi, "$1 kilómetros")
+    .replace(/(\d)\s?mts?\b/gi, "$1 metros")
+    .replace(/(\d)\s?m\b/g, "$1 metros")
+    .replace(/(\d)\s?°\s?C\b/gi, "$1 grados")
+    .replace(/(\d)\s?°/g, "$1 grados")
+    .replace(/(\d)\s?%/g, "$1 por ciento")
+    .replace(/(\d)\.(\d)/g, "$1 punto $2")
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 type RunContext = {
@@ -470,15 +492,8 @@ async function geminiWebSearch(client: GoogleGenAI, query: string, language: str
 async function runGemini(ctx: RunContext): Promise<FinalAnswer> {
   const client = geminiClient();
   const declarations = [
-    {
-      name: "web_search",
-      description: "Search the web for news, weather, traffic, sports, prices or general facts.",
-      parametersJsonSchema: {
-        type: "object",
-        properties: { query: { type: "string" } },
-        required: ["query"],
-      },
-    },
+    // No web_search here: Google Search grounding isn't in the free tier, and
+    // every failed attempt costs quota and seconds while the driver waits.
     { name: "search_nearby_places", description: NEARBY_DESCRIPTION, parametersJsonSchema: NEARBY_SCHEMA },
     { name: "find_destination", description: DESTINATION_DESCRIPTION, parametersJsonSchema: DESTINATION_SCHEMA },
     { name: "get_weather", description: WEATHER_DESCRIPTION, parametersJsonSchema: WEATHER_SCHEMA },
@@ -583,6 +598,7 @@ async function run(params: {
     : null;
 
   let lastPlaces: Place[] = [];
+  let nearbyPlaces: Place[] = [];
   const ctx: RunContext = {
     model,
     messages: params.messages,
@@ -590,6 +606,8 @@ async function run(params: {
     language: params.language,
     onPlaces: (p) => {
       lastPlaces = p;
+      // Category searches carry a category from geoServices.categories.
+      if (p[0] && (geoServices.categories as string[]).includes(p[0].category)) nearbyPlaces = p;
     },
     instructions: (finalStep) =>
       buildInstructions({
@@ -617,6 +635,29 @@ async function run(params: {
       console.warn(`Gemini quota exhausted for ${model}; falling back to ${GEMINI_SEARCH_MODEL}`);
       usedModel = GEMINI_SEARCH_MODEL;
       answer = await runGemini({ ...ctx, model: GEMINI_SEARCH_MODEL });
+    }
+  }
+
+  // "…la gasolinera más cercana": guarantee the closest result, whatever the model picked.
+  const lastUserText = params.messages[params.messages.length - 1]?.content.toLowerCase() ?? "";
+  const closest = nearbyPlaces[0];
+  if (answer.action.type === "navigate" && closest && /cercan|cerca|nearest|closest/.test(lastUserText)) {
+    if (answer.action.lat !== closest.lat || answer.action.lng !== closest.lng) {
+      const km = (closest.distanceMeters ?? 0) / 1000;
+      const dist = km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(closest.distanceMeters ?? 0)} m`;
+      answer = {
+        reply: `Iniciando navegación a ${closest.name}, a ${dist}.`,
+        speech: speakable(`Iniciando navegación a ${closest.name}, a ${dist}.`),
+        action: {
+          type: "navigate",
+          destinationName: closest.name,
+          lat: closest.lat,
+          lng: closest.lng,
+          address: closest.address,
+          phone: closest.phone,
+        },
+      };
+      lastPlaces = nearbyPlaces;
     }
   }
   return {

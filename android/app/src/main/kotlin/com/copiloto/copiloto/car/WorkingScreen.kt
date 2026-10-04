@@ -76,9 +76,18 @@ class WorkingScreen(
         val sm = screenManager
         result.onSuccess { (reply, userText) ->
             if (userText.isNotBlank()) session.remember(userText, reply.reply)
-            session.speaker.speak(reply.speech)
             sm.pop()
             sm.push(ResultScreen(carContext, session, reply))
+            val action = reply.action
+            if (action.canNavigate) {
+                // "Inicia la navegación a…": say it, then hand off to Google Maps / Waze
+                // on the car screen immediately — no extra tap while driving.
+                session.speaker.speak(reply.speech) {
+                    CarNavigation.start(carContext, action.lat!!, action.lng!!, action.destinationName ?: "Destino")
+                }
+            } else {
+                session.speaker.speak(reply.speech)
+            }
         }.onFailure { e ->
             val message = (e as? AssistantException)?.message ?: "Algo salió mal. Intenta de nuevo."
             session.speaker.speak(message)

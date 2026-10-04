@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import '../models.dart';
 import 'assistant_api.dart';
+import 'navigation_launcher.dart';
 import 'location_service.dart';
 import 'voice_service.dart';
 
@@ -142,6 +143,12 @@ class AssistantController extends ChangeNotifier {
         await _voice.speak(reply.speech);
       }
       _set(AssistantStatus.idle);
+      // "Inicia la navegación a…": open turn-by-turn right away, no extra tap.
+      // On a phone connected to the car, Google Maps takes over the Android Auto screen.
+      final action = reply.action;
+      if (action.canNavigate) {
+        await NavigationLauncher.navigate(action.lat!, action.lng!);
+      }
     } on AssistantException catch (e) {
       error = e.message;
       _set(AssistantStatus.error);

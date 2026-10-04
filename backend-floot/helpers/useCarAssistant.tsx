@@ -6,6 +6,7 @@ import {
   type OutputType,
 } from "../endpoints/assistant/chat_POST.schema";
 import { postAssistantVoice } from "../endpoints/assistant/voice_POST.schema";
+import { navigationLinks } from "./navigationLinks";
 
 const HISTORY_KEY = "copiloto.history.v1";
 const MAX_HISTORY = 12;
@@ -66,6 +67,21 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+/** Best installed Spanish voice; browsers default to an English voice on some systems. */
+function pickVoice(language: string): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith("es"));
+  if (!voices.length) return null;
+  const score = (v: SpeechSynthesisVoice) => {
+    const lang = v.lang.toLowerCase().replace("_", "-");
+    let s = 0;
+    if (lang === language.toLowerCase()) s += 100;
+    if (lang === "es-us" || lang === "es-419") s += 60;
+    if (/google|natural|neural|online/i.test(v.name)) s += 30;
+    return s;
+  };
+  return [...voices].sort((a, b) => score(b) - score(a))[0];
+}
+
 export function speakText(text: string, language: string, onEnd?: () => void) {
   if (typeof window === "undefined") return;
   if (window.CopilotoNative?.postMessage) {
@@ -80,7 +96,9 @@ export function speakText(text: string, language: string, onEnd?: () => void) {
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = language;
-  u.rate = 1.03;
+  const voice = pickVoice(language);
+  if (voice) u.voice = voice;
+  u.rate = 1;
   u.onend = () => onEnd?.();
   u.onerror = () => onEnd?.();
   window.speechSynthesis.speak(u);
@@ -132,11 +150,27 @@ export function useCarAssistant(options: {
     setHistory(next);
     saveHistory(next);
     setLast(result);
+    // "Inicia la navegación a…": open turn-by-turn as soon as the reply is spoken.
+    const action = result.action;
+    const startNavigation = () => {
+      if (action.type !== "navigate" || action.lat == null || action.lng == null) return;
+      if (window.CopilotoNative?.postMessage) {
+        window.CopilotoNative.postMessage(
+          JSON.stringify({ type: "navigate", lat: action.lat, lng: action.lng, name: action.destinationName }),
+        );
+      } else {
+        window.open(navigationLinks.googleMaps(action.lat, action.lng), "_blank", "noopener");
+      }
+    };
     if (optionsRef.current.voiceEnabled && result.speech) {
       setStatus("speaking");
-      speakText(result.speech, optionsRef.current.language, () => setStatus("idle"));
+      speakText(result.speech, optionsRef.current.language, () => {
+        setStatus("idle");
+        startNavigation();
+      });
     } else {
       setStatus("idle");
+      startNavigation();
     }
   }, []);
 

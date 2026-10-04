@@ -3,7 +3,12 @@ import type { Place } from "../endpoints/assistant/chat_POST.schema";
 // Free, key-less OpenStreetMap services. Both require an identifying
 // User-Agent and fair use (no bulk queries).
 const USER_AGENT = "AICarAssistant/1.0 (floot.app)";
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+// Public Overpass instances; the main one often returns 504 under load.
+const OVERPASS_URLS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org";
 
 export const PLACE_CATEGORIES = {
@@ -54,6 +59,96 @@ async function searchNearby(params: {
   keyword?: string | null;
   limit?: number;
 }): Promise<Place[]> {
+  try {
+    return await searchNearbyOverpass(params);
+  } catch (err) {
+    console.warn("Overpass unavailable, falling back to Nominatim", err);
+    return searchNearbyNominatim(params);
+  }
+}
+
+// Nominatim free-text terms per category (used only when Overpass is down).
+const NOMINATIM_TERMS: Record<PlaceCategory, string> = {
+  fuel: "fuel",
+  ev_charging: "charging station",
+  restaurant: "restaurant",
+  cafe: "cafe",
+  parking: "parking",
+  hospital: "hospital",
+  pharmacy: "pharmacy",
+  atm: "atm",
+  supermarket: "supermarket",
+  car_repair: "car repair",
+  car_wash: "car wash",
+  hotel: "hotel",
+  toilets: "toilets",
+  police: "police",
+};
+
+async function searchNearbyNominatim(params: {
+  category: PlaceCategory;
+  lat: number;
+  lng: number;
+  radiusMeters?: number | null;
+  keyword?: string | null;
+  limit?: number;
+}): Promise<Place[]> {
+  const radius = Math.min(Math.max(params.radiusMeters ?? 5000, 1000), 25000);
+  const dLat = radius / 111_000;
+  const dLng = dLat / Math.max(Math.cos((params.lat * Math.PI) / 180), 0.2);
+  const url = new URL(`${NOMINATIM_URL}/search`);
+  // Search by category; a brand keyword is applied as a filter afterwards.
+  url.searchParams.set("q", NOMINATIM_TERMS[params.category]);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "30");
+  url.searchParams.set("bounded", "1");
+  url.searchParams.set(
+    "viewbox",
+    `${params.lng - dLng},${params.lat + dLat},${params.lng + dLng},${params.lat - dLat}`,
+  );
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`Nominatim error ${res.status}`);
+  const data = (await res.json()) as Array<{
+    place_id: number;
+    lat: string;
+    lon: string;
+    name?: string;
+    display_name: string;
+  }>;
+  const all = data
+    .map((r) => {
+      const lat = Number(r.lat);
+      const lng = Number(r.lon);
+      return {
+        id: `nominatim/${r.place_id}`,
+        name: r.name || r.display_name.split(",")[0],
+        category: params.category,
+        lat,
+        lng,
+        distanceMeters: haversineMeters(params.lat, params.lng, lat, lng),
+        address: r.display_name.split(",").slice(1, 3).join(",").trim() || null,
+        phone: null,
+        openingHours: null,
+      } satisfies Place;
+    })
+    .sort((a, b) => a.distanceMeters - b.distanceMeters);
+  const keyword = params.keyword?.trim().toLowerCase();
+  const filtered = keyword ? all.filter((p) => p.name.toLowerCase().includes(keyword)) : all;
+  console.log(`Nominatim fallback: ${all.length} results, ${filtered.length} after keyword filter`);
+  return (filtered.length ? filtered : all).slice(0, params.limit ?? 6);
+}
+
+async function searchNearbyOverpass(params: {
+  category: PlaceCategory;
+  lat: number;
+  lng: number;
+  radiusMeters?: number | null;
+  keyword?: string | null;
+  limit?: number;
+}): Promise<Place[]> {
   const radius = Math.min(Math.max(params.radiusMeters ?? 5000, 300), 25000);
   const filter = PLACE_CATEGORIES[params.category];
   const nameFilter = params.keyword?.trim()
@@ -61,17 +156,10 @@ async function searchNearby(params: {
     : "";
   const query = `[out:json][timeout:15];nwr${filter}${nameFilter}(around:${radius},${params.lat},${params.lng});out center tags 60;`;
 
-  const res = await fetch(OVERPASS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": USER_AGENT,
-    },
-    body: `data=${encodeURIComponent(query)}`,
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!res.ok) throw new Error(`Overpass error ${res.status}`);
-  const data = (await res.json()) as {
+  // Ask all mirrors at once and keep the first good answer (the driver is waiting).
+  const controllers = OVERPASS_URLS.map(() => new AbortController());
+  const timer = setTimeout(() => controllers.forEach((c) => c.abort()), 7000);
+  type OverpassData = {
     elements: Array<{
       type: string;
       id: number;
@@ -81,6 +169,28 @@ async function searchNearby(params: {
       tags?: Record<string, string>;
     }>;
   };
+  let data: OverpassData;
+  try {
+    data = await Promise.any(
+      OVERPASS_URLS.map(async (url, i) => {
+        const r = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": USER_AGENT,
+          },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: controllers[i].signal,
+        });
+        if (!r.ok) throw new Error(`Overpass error ${r.status} at ${url}`);
+        const json = (await r.json()) as OverpassData;
+        controllers.forEach((c, j) => j !== i && c.abort());
+        return json;
+      }),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   const places: Place[] = [];
   for (const el of data.elements ?? []) {

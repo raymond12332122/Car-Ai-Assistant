@@ -103,16 +103,8 @@ class ResultScreen(
         }
     }
 
-    /** Hands off to the car's navigation app (Google Maps / Waze on Android Auto). */
-    private fun navigate(lat: Double, lng: Double, name: String) {
-        val label = Uri.encode(name)
-        val intent = Intent(CarContext.ACTION_NAVIGATE, Uri.parse("geo:0,0?q=$lat,$lng($label)"))
-        try {
-            carContext.startCarApp(intent)
-        } catch (e: Exception) {
-            CarToast.makeText(carContext, "No hay app de navegación disponible", CarToast.LENGTH_LONG).show()
-        }
-    }
+    private fun navigate(lat: Double, lng: Double, name: String) =
+        CarNavigation.start(carContext, lat, lng, name)
 
     private fun call(phone: String) {
         try {
