@@ -22,6 +22,15 @@ class AssistantController extends ChangeNotifier {
         _location = location ?? LocationService();
 
   static const _historyKey = 'copiloto.history.v1';
+  static const _contextTurns = 6;
+  static const _noNavigationNote =
+      '(Nota: no pedí navegar ni buscar lugares. Responde de forma conversacional, sin navegación.)';
+
+  /// True when the driver explicitly asks to go somewhere.
+  static bool wantsNavigation(String text) => RegExp(
+        r'll[eé]v|lleva|naveg|\bruta\b|dir[ií]g|\bir a\b|\bvamos\b|v[aá]monos|c[oó]mo llego|llegar a|take me|navigate|directions|drive to|go to',
+        caseSensitive: false,
+      ).hasMatch(text);
   /// Also read by the Android Auto screens (FlutterSharedPreferences, key "flutter.copiloto.model").
   static const modelKey = 'copiloto.model';
 
@@ -124,11 +133,31 @@ class AssistantController extends ChangeNotifier {
         ...history,
         ChatMessage(role: 'user', content: trimmed),
       ];
-      final reply = await _api.chat(
-        messages: messages.length > 20 ? messages.sublist(messages.length - 20) : messages,
-        location: location,
-        model: activeModel,
-      );
+      // Short context: a long history full of "gasolinera" turns made the model
+      // keep navigating on unrelated requests.
+      final context =
+          messages.length > _contextTurns ? messages.sublist(messages.length - _contextTurns) : messages;
+      var reply = await _api.chat(messages: context, location: location, model: activeModel);
+      if (reply.action.canNavigate && !wantsNavigation(trimmed)) {
+        // Navigation the driver didn't ask for: ask again for a conversational answer.
+        reply = await _api.chat(
+          messages: [
+            ...context.sublist(0, context.length - 1),
+            ChatMessage(role: 'user', content: '$trimmed\n\n$_noNavigationNote'),
+          ],
+          location: location,
+          model: activeModel,
+        );
+        if (reply.action.canNavigate) {
+          reply = AssistantReply(
+            reply: reply.reply,
+            speech: reply.speech,
+            action: const AssistantAction(type: 'none'),
+            places: const [],
+            model: reply.model,
+          );
+        }
+      }
       lastReply = reply;
       history = [
         ...messages,

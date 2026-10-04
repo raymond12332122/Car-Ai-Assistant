@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:copiloto/models.dart';
 import 'package:copiloto/services/assistant_api.dart';
+import 'package:copiloto/services/assistant_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -107,5 +108,25 @@ void main() {
     expect(a.canNavigate, isTrue);
     expect(const Place(id: 'a', name: 'b', category: 'c', lat: 0, lng: 0, distanceMeters: 1450)
         .distanceLabel, '1.4 km');
+  });
+
+  test('only explicit requests count as navigation', () {
+    for (final t in [
+      'Inicia la navegación a la gasolinera más cercana',
+      'Llévame a un hospital',
+      'Vamos al Estadio Azteca',
+      '¿Cómo llego a Polanco?',
+      'Ponme la ruta a casa',
+    ]) {
+      expect(AssistantController.wantsNavigation(t), isTrue, reason: t);
+    }
+    for (final t in [
+      'Cuéntame algo mientras manejo',
+      '¿Dónde hay gasolineras?',
+      '¿Cómo está el clima?',
+      'Dime un chiste',
+    ]) {
+      expect(AssistantController.wantsNavigation(t), isFalse, reason: t);
+    }
   });
 }

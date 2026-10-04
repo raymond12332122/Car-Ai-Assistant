@@ -39,7 +39,8 @@ class CopilotoSession : Session() {
             prefs.edit().putString("flutter.copiloto.model", value).apply()
         }
 
-    fun historySnapshot(): List<Turn> = synchronized(history) { history.toList() }
+    // Short context so an earlier topic (e.g. a gas station) doesn't leak into new requests.
+    fun historySnapshot(): List<Turn> = synchronized(history) { history.toList().takeLast(6) }
 
     fun remember(user: String, assistant: String) = synchronized(history) {
         history.addLast(Turn("user", user))

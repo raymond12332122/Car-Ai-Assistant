@@ -153,6 +153,7 @@ function buildInstructions(params: {
   location: GeoLocation | null | undefined;
   locationLabel: string | null;
   finalStep: string;
+  noNavigation?: boolean;
 }) {
   const now = new Date().toISOString();
   const loc = params.location
@@ -171,10 +172,14 @@ function buildInstructions(params: {
     driving,
     "Safety first: never encourage reading, typing or watching video while driving; suggest pulling over for anything long. Never invent places, prices or opening hours.",
     "For places near the driver, call search_nearby_places. For a named destination, call find_destination. For weather, call get_weather. For news, traffic info, sports, prices or other current facts, use web search (at most once or twice).",
-    "Actions: when the user wants to go somewhere specific, set action.type='navigate' with destinationName, lat, lng (from tool results). The app STARTS turn-by-turn navigation immediately on 'navigate', so never ask for confirmation.",
-    "If the user asks to go to / navigate to / start navigation to a KIND of place (e.g. 'inicia la navegación a la gasolinera más cercana', 'llévame a un hospital'), call search_nearby_places, pick the closest result and return action.type='navigate' with that place's coordinates — not 'show_places'. Speech example: 'Iniciando navegación a Pemex, a ochocientos metros.'",
+    "Small talk is welcome: for 'cuéntame algo', jokes, fun facts, stories or questions, just answer in a friendly way with action.type='none' and do NOT call any tool.",
+    "Navigation: ONLY when the CURRENT message explicitly asks to go somewhere ('llévame', 'navega', 'inicia la navegación', 'ruta a', 'vamos a', '¿cómo llego a…?'). Never navigate because of earlier turns. Then set action.type='navigate' with destinationName, lat, lng from tool results; the app starts turn-by-turn immediately, so never ask for confirmation.",
+    "For a KIND of place ('llévame a la gasolinera más cercana', 'a un hospital'), call search_nearby_places and navigate to the closest result. Speech like: 'Iniciando navegación a <nombre>, a <distancia>.'",
     "Use 'show_places' only when the user asks what options exist (e.g. '¿dónde hay gasolineras?'); mention the closest 2-3 by name and distance. To phone a place, action.type='call' with phone. Otherwise 'none' with nulls.",
     "`speech` is read by a text-to-speech voice: write every unit and symbol as words (kilómetros, metros, grados, kilómetros por hora, por ciento), round numbers naturally ('unos ochocientos metros', 'un kilómetro y medio'), no abbreviations, no addresses with numbers unless asked, no markdown, no URLs, no emojis.",
+    params.noNavigation
+      ? "The user did NOT ask to navigate or to find places in this message. Do not call search_nearby_places or find_destination; answer conversationally with action.type='none'."
+      : "",
     params.finalStep,
     loc,
     `Current time (UTC): ${now}.`,
@@ -268,6 +273,10 @@ function speakable(text: string): string {
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
+/** Explicit "take me somewhere" phrasing (es/en). */
+const NAV_INTENT =
+  /ll[eé]v|lleva|naveg|\bruta\b|dir[ií]g|\bir a\b|\bvamos\b|v[aá]monos|c[oó]mo llego|llegar a|take me|navigate|directions|drive to|go to/i;
 
 type RunContext = {
   model: AssistantModelId;
@@ -599,6 +608,7 @@ async function run(params: {
 
   let lastPlaces: Place[] = [];
   let nearbyPlaces: Place[] = [];
+  let noNav = false;
   const ctx: RunContext = {
     model,
     messages: params.messages,
@@ -616,26 +626,38 @@ async function run(params: {
         location: params.location,
         locationLabel,
         finalStep,
+        noNavigation: noNav,
       }),
   };
 
   let usedModel: AssistantModelId = model;
-  let answer: FinalAnswer;
-  if (provider === "anthropic") {
-    answer = await runClaude(ctx);
-  } else if (provider === "openai") {
-    answer = await runOpenAI(ctx);
-  } else {
+  const runProvider = async (c: RunContext): Promise<FinalAnswer> => {
+    if (provider === "anthropic") return runClaude(c);
+    if (provider === "openai") return runOpenAI(c);
     try {
-      answer = await runGemini(ctx);
+      return await runGemini({ ...c, model: usedModel });
     } catch (err) {
       // Free-tier quota for the chosen Gemini model ran out: fall back to Flash Lite.
       const status = (err as { status?: number }).status;
-      if (status !== 429 || model === GEMINI_SEARCH_MODEL) throw err;
-      console.warn(`Gemini quota exhausted for ${model}; falling back to ${GEMINI_SEARCH_MODEL}`);
+      if (status !== 429 || usedModel === GEMINI_SEARCH_MODEL) throw err;
+      console.warn(`Gemini quota exhausted for ${usedModel}; falling back to ${GEMINI_SEARCH_MODEL}`);
       usedModel = GEMINI_SEARCH_MODEL;
-      answer = await runGemini({ ...ctx, model: GEMINI_SEARCH_MODEL });
+      return runGemini({ ...c, model: GEMINI_SEARCH_MODEL });
     }
+  };
+
+  let answer = await runProvider(ctx);
+
+  // Only navigate when the current message explicitly asks for it: the small
+  // free model sometimes jumped to the last gas station on chit-chat.
+  const currentText = params.messages[params.messages.length - 1]?.content ?? "";
+  if (answer.action.type === "navigate" && !NAV_INTENT.test(currentText)) {
+    console.warn("Navigation without navigation intent; asking again conversationally");
+    lastPlaces = [];
+    nearbyPlaces = [];
+    noNav = true;
+    answer = await runProvider(ctx);
+    if (answer.action.type === "navigate") answer = { ...answer, action: NO_ACTION };
   }
 
   // "…la gasolinera más cercana": guarantee the closest result, whatever the model picked.

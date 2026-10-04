@@ -22,6 +22,15 @@ class WorkingScreen(
     private val job: Job,
 ) : Screen(carContext) {
 
+    companion object {
+        private val NAV_INTENT = Regex(
+            "ll[eé]v|lleva|naveg|\\bruta\\b|dir[ií]g|\\bir a\\b|\\bvamos\\b|v[aá]monos|c[oó]mo llego|llegar a|take me|navigate|directions|drive to|go to",
+            RegexOption.IGNORE_CASE,
+        )
+        private const val NO_NAV_NOTE =
+            "(Nota: no pedí navegar ni buscar lugares. Responde de forma conversacional, sin navegación.)"
+    }
+
     sealed interface Job {
         data object Voice : Job
         data class Text(val prompt: String) : Job
@@ -48,7 +57,7 @@ class WorkingScreen(
             val result = runCatching {
                 val history = session.historySnapshot()
                 val fix = session.location.lastFix()
-                when (job) {
+                val (reply, userText) = when (job) {
                     is Job.Text -> session.client.chat(
                         history + Turn("user", job.prompt), fix, CopilotoSession.LANGUAGE, session.selectedModel,
                     ) to job.prompt
@@ -56,13 +65,32 @@ class WorkingScreen(
                         val wav = session.recorder.recordUtterance()
                             ?: throw AssistantException("No escuché nada. Toca Hablar e inténtalo de nuevo.")
                         main.execute { setPhase("Pensando…") }
-                        val reply = session.client.voice(wav, history, fix, CopilotoSession.LANGUAGE, session.selectedModel)
-                        reply to (reply.transcript ?: "")
+                        val r = session.client.voice(wav, history, fix, CopilotoSession.LANGUAGE, session.selectedModel)
+                        r to (r.transcript ?: "")
                     }
                 }
+                guardNavigation(reply, userText, history, fix) to userText
             }
             main.execute { onFinished(result) }
         }
+    }
+
+    /**
+     * Only navigate when the driver explicitly asked to go somewhere ("llévame",
+     * "navega", "ruta"…). Otherwise ask again for a conversational answer — the
+     * small free model sometimes jumped to the last gas station on chit-chat.
+     */
+    private fun guardNavigation(reply: CarReply, userText: String, history: List<Turn>, fix: Fix?): CarReply {
+        if (!reply.action.canNavigate || userText.isBlank() || NAV_INTENT.containsMatchIn(userText)) return reply
+        val retry = session.client.chat(
+            history + Turn("user", "$userText\n\n$NO_NAV_NOTE"), fix, CopilotoSession.LANGUAGE, session.selectedModel,
+        )
+        val safe = if (retry.action.canNavigate) {
+            retry.copy(action = retry.action.copy(type = "none", lat = null, lng = null), places = emptyList())
+        } else {
+            retry
+        }
+        return safe.copy(transcript = reply.transcript)
     }
 
     private fun setPhase(text: String) {
