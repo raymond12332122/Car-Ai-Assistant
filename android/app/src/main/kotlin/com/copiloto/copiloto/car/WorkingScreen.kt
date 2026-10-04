@@ -50,13 +50,13 @@ class WorkingScreen(
                 val fix = session.location.lastFix()
                 when (job) {
                     is Job.Text -> session.client.chat(
-                        history + Turn("user", job.prompt), fix, CopilotoSession.LANGUAGE,
+                        history + Turn("user", job.prompt), fix, CopilotoSession.LANGUAGE, session.selectedModel,
                     ) to job.prompt
                     Job.Voice -> {
                         val wav = session.recorder.recordUtterance()
                             ?: throw AssistantException("No escuché nada. Toca Hablar e inténtalo de nuevo.")
                         main.execute { setPhase("Pensando…") }
-                        val reply = session.client.voice(wav, history, fix, CopilotoSession.LANGUAGE)
+                        val reply = session.client.voice(wav, history, fix, CopilotoSession.LANGUAGE, session.selectedModel)
                         reply to (reply.transcript ?: "")
                     }
                 }

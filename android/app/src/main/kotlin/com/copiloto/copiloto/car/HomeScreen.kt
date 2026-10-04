@@ -62,6 +62,12 @@ class HomeScreen(carContext: CarContext, private val session: CopilotoSession) :
                 ActionStrip.Builder()
                     .addAction(
                         Action.Builder()
+                            .setTitle("Modelo")
+                            .setOnClickListener { screenManager.push(ModelScreen(carContext, session)) }
+                            .build(),
+                    )
+                    .addAction(
+                        Action.Builder()
                             .setTitle("Nueva")
                             .setOnClickListener {
                                 session.clearHistory()

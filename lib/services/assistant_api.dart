@@ -31,13 +31,33 @@ class AssistantApi {
     required List<ChatMessage> messages,
     GeoPoint? location,
     String surface = 'phone',
+    String? model,
   }) {
     return _post('/_api/assistant/chat', {
       'messages': messages.map((m) => m.toJson()).toList(),
       'location': location?.toJson(),
       'language': AppConfig.language,
       'surface': surface,
+      'model': ?model,
     });
+  }
+
+  /// Models offered by the backend and whether each API key is connected.
+  Future<ModelCatalog> models() async {
+    try {
+      final res = await _client
+          .get(Uri.parse('$_baseUrl/_api/assistant/models'))
+          .timeout(const Duration(seconds: 20));
+      final decoded = _unwrap(res.body);
+      if (res.statusCode != 200 || decoded is! Map<String, dynamic>) {
+        throw AssistantException('No se pudo cargar la lista de modelos.');
+      }
+      return ModelCatalog.fromJson(decoded);
+    } on AssistantException {
+      rethrow;
+    } catch (_) {
+      throw AssistantException('Sin conexión con Copiloto.');
+    }
   }
 
   Future<AssistantReply> _post(String path, Map<String, dynamic> body) async {

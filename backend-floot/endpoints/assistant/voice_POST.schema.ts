@@ -18,6 +18,7 @@ export const schema = z.object({
   location: locationSchema.nullish(),
   language: z.string().min(2).max(10).default("es-MX"),
   surface: z.enum(["car", "phone", "web"]).default("car"),
+  model: z.string().max(60).nullish(),
 });
 
 export type InputType = z.input<typeof schema>;

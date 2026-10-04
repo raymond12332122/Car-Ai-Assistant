@@ -22,12 +22,29 @@ import { Button } from "../components/Button";
 import { Input } from "../components/Input";
 import { Spinner } from "../components/Spinner";
 import { PlaceCard } from "../components/PlaceCard";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/Select";
 import { switchToDarkMode } from "../helpers/themeMode";
 import { useCarAssistant } from "../helpers/useCarAssistant";
+import { useAssistantModels } from "../helpers/useAssistantModels";
 import { navigationLinks } from "../helpers/navigationLinks";
 import styles from "./_index.module.css";
 
 const LANGUAGE = "es-MX";
+const MODEL_KEY = "copiloto.model.v1";
+
+function loadModel(): string | null {
+  try {
+    return localStorage.getItem(MODEL_KEY);
+  } catch {
+    return null;
+  }
+}
 
 const QUICK_ACTIONS = [
   { label: "Gasolina", icon: Fuel, prompt: "Busca la gasolinera más cercana" },
@@ -50,8 +67,22 @@ const STATUS_LABEL = {
 export default function CarAssistantPage() {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [text, setText] = useState("");
+  const [chosenModel, setChosenModel] = useState<string | null>(() => loadModel());
+  const modelsQuery = useAssistantModels();
+  const models = modelsQuery.data?.models ?? [];
+  const chosenAvailable = models.find((m) => m.id === chosenModel && m.available);
+  const model = chosenAvailable?.id ?? modelsQuery.data?.defaultModel ?? null;
   const { status, last, transcript, error, location, ask, toggleListening, clear } =
-    useCarAssistant({ language: LANGUAGE, voiceEnabled });
+    useCarAssistant({ language: LANGUAGE, voiceEnabled, model });
+
+  const onModelChange = (id: string) => {
+    setChosenModel(id);
+    try {
+      localStorage.setItem(MODEL_KEY, id);
+    } catch {
+      /* per-device preference only */
+    }
+  };
 
   useEffect(() => {
     switchToDarkMode();
@@ -106,6 +137,31 @@ export default function CarAssistantPage() {
       </header>
 
       <main className={styles.main}>
+        <div className={styles.modelRow}>
+          <span className={styles.modelLabel}>Modelo</span>
+          {modelsQuery.isFetching && !modelsQuery.data ? (
+            <Spinner size="sm" />
+          ) : (
+            <Select value={model ?? undefined} onValueChange={onModelChange} disabled={!models.length}>
+              <SelectTrigger className={styles.modelTrigger} aria-label="Modelo de IA">
+                <SelectValue placeholder="Conecta una llave de API" />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((m) => (
+                  <SelectItem key={m.id} value={m.id} disabled={!m.available}>
+                    {m.label} — {m.available ? m.note : "falta la llave"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        {modelsQuery.data && !modelsQuery.data.defaultModel && (
+          <p className={styles.error}>
+            Conecta tu llave de Claude o de OpenAI en Floot para activar el asistente.
+          </p>
+        )}
+
         <section className={styles.conversation} aria-live="polite">
           <p className={`${styles.status} ${styles[`status_${status}`]}`}>
             {busy && <Spinner size="sm" />} {STATUS_LABEL[status]}

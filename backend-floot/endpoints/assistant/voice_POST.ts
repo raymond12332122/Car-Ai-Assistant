@@ -30,6 +30,7 @@ export async function handle(request: Request) {
       location: input.location,
       language: input.language,
       surface: input.surface,
+      model: input.model,
     });
     return new Response(
       superjson.stringify({ ...result, transcript } satisfies OutputType),

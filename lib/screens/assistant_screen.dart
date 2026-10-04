@@ -210,6 +210,7 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 10),
           const Text('Copiloto', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
           const Spacer(),
+          _ModelChip(controller: controller),
           IconButton(
             iconSize: 30,
             tooltip: controller.voiceEnabled ? 'Silenciar voz' : 'Activar voz',
@@ -223,6 +224,82 @@ class _Header extends StatelessWidget {
             icon: const Icon(Icons.refresh),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ModelChip extends StatelessWidget {
+  const _ModelChip({required this.controller});
+  final AssistantController controller;
+
+  String _shortLabel() {
+    final id = controller.activeModel;
+    final match = controller.catalog?.models.where((m) => m.id == id);
+    if (match == null || match.isEmpty) return id ?? 'Sin modelo';
+    return match.first.label.replaceFirst('ChatGPT · ', '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasModel = controller.activeModel != null;
+    return ActionChip(
+      avatar: Icon(Icons.auto_awesome,
+          size: 18, color: hasModel ? CopilotoColors.primary : CopilotoColors.warning),
+      label: Text(_shortLabel(), style: const TextStyle(fontSize: 14)),
+      onPressed: () => _openPicker(context),
+    );
+  }
+
+  Future<void> _openPicker(BuildContext context) async {
+    await controller.refreshModels();
+    if (!context.mounted) return;
+    final catalog = controller.catalog;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: CopilotoColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text('Modelo de IA',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            ),
+            if (catalog == null)
+              const ListTile(title: Text('No se pudo cargar la lista. Revisa tu conexión.'))
+            else ...[
+              for (final m in catalog.models)
+                ListTile(
+                  enabled: m.available,
+                  minTileHeight: 64,
+                  leading: Icon(
+                    m.provider == 'anthropic' ? Icons.auto_awesome : Icons.chat_bubble_outline,
+                    color: m.available ? CopilotoColors.primary : CopilotoColors.muted,
+                  ),
+                  title: Text(m.label, style: const TextStyle(fontSize: 18)),
+                  subtitle: Text(m.available ? m.note : 'Falta conectar la llave de API'),
+                  trailing: m.id == controller.activeModel
+                      ? const Icon(Icons.check, color: CopilotoColors.primary)
+                      : null,
+                  onTap: () {
+                    controller.selectModel(m.id);
+                    Navigator.pop(ctx);
+                  },
+                ),
+              if (!catalog.voiceAvailable)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Text(
+                    'La voz desde el micrófono del auto (Android Auto) necesita la llave de OpenAI para transcribir.',
+                    style: TextStyle(color: CopilotoColors.muted),
+                  ),
+                ),
+            ],
+          ],
+        ),
       ),
     );
   }

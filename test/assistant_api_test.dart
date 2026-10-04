@@ -51,9 +51,11 @@ void main() {
     final reply = await api.chat(
       messages: const [ChatMessage(role: 'user', content: 'gasolina')],
       location: const GeoPoint(lat: 19.43, lng: -99.13),
+      model: 'claude-haiku-4-5',
     );
 
     expect(sent['surface'], 'phone');
+    expect(sent['model'], 'claude-haiku-4-5');
     expect((sent['location'] as Map)['lat'], 19.43);
     expect(reply.action.type, 'show_places');
     expect(reply.action.canNavigate, isFalse);
@@ -75,6 +77,28 @@ void main() {
       throwsA(isA<AssistantException>()
           .having((e) => e.code, 'code', 'OUT_OF_CREDITS')),
     );
+  });
+
+  test('parses the model catalog', () async {
+    final api = AssistantApi(
+      baseUrl: 'https://example.test',
+      client: MockClient((_) async => http.Response(
+            jsonEncode({
+              'json': {
+                'defaultModel': 'gpt-6-luna',
+                'voiceAvailable': true,
+                'models': [
+                  {'id': 'claude-opus-5-5', 'provider': 'anthropic', 'label': 'Claude Opus 5.5', 'note': '', 'available': false},
+                  {'id': 'gpt-6-luna', 'provider': 'openai', 'label': 'GPT-6 Luna', 'note': '', 'available': true},
+                ],
+              },
+            }),
+            200,
+          )),
+    );
+    final catalog = await api.models();
+    expect(catalog.defaultModel, 'gpt-6-luna');
+    expect(catalog.models.where((m) => m.available).single.id, 'gpt-6-luna');
   });
 
   test('navigate action exposes coordinates', () {

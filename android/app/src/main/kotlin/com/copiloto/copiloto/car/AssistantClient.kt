@@ -36,6 +36,8 @@ data class CarReply(
     val transcript: String?,
 )
 
+data class ModelOption(val id: String, val label: String, val note: String, val available: Boolean)
+
 data class Turn(val role: String, val content: String)
 
 data class Fix(val lat: Double, val lng: Double, val speedKmh: Double?)
@@ -48,24 +50,48 @@ class AssistantException(message: String, val code: String? = null) : IOExceptio
  */
 class AssistantClient(private val baseUrl: String = BuildConfig.BACKEND_URL) {
 
-    fun chat(history: List<Turn>, location: Fix?, language: String): CarReply {
+    fun chat(history: List<Turn>, location: Fix?, language: String, model: String?): CarReply {
         val body = JSONObject()
             .put("messages", history.toJson())
             .put("language", language)
             .put("surface", "car")
+        model?.let { body.put("model", it) }
         location?.let { body.put("location", it.toJson()) }
         return post("/_api/assistant/chat", body)
     }
 
-    fun voice(wav: ByteArray, history: List<Turn>, location: Fix?, language: String): CarReply {
+    fun voice(wav: ByteArray, history: List<Turn>, location: Fix?, language: String, model: String?): CarReply {
         val body = JSONObject()
             .put("audioBase64", Base64.encodeToString(wav, Base64.NO_WRAP))
             .put("mimeType", "audio/wav")
             .put("history", history.takeLast(19).toJson())
             .put("language", language)
             .put("surface", "car")
+        model?.let { body.put("model", it) }
         location?.let { body.put("location", it.toJson()) }
         return post("/_api/assistant/voice", body)
+    }
+
+    fun models(): List<ModelOption> {
+        val conn = (URL("$baseUrl/_api/assistant/models").openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 20_000
+        }
+        try {
+            if (conn.responseCode != 200) throw AssistantException("No se pudo cargar la lista de modelos.")
+            val raw = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val arr = (raw.optJSONObject("json") ?: raw).optJSONArray("models") ?: JSONArray()
+            return (0 until arr.length()).map { i ->
+                val m = arr.getJSONObject(i)
+                ModelOption(m.getString("id"), m.getString("label"), m.optString("note"), m.optBoolean("available"))
+            }
+        } catch (e: AssistantException) {
+            throw e
+        } catch (e: Exception) {
+            throw AssistantException("Sin conexión. Revisa los datos del teléfono.")
+        } finally {
+            conn.disconnect()
+        }
     }
 
     private fun post(path: String, body: JSONObject): CarReply {

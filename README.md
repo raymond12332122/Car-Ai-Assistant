@@ -21,8 +21,9 @@ y responde clima, tráfico o cualquier pregunta — todo con respuestas cortas h
  Android Auto (Kotlin)├──► https://copiloto-car-ai.floot.app/_api/assistant/chat   (texto)
  UI web / WebView ────┘                                   /_api/assistant/voice  (audio WAV/WebM)
                                 │
-                                ├─ Floot AI · gpt-6-luna (respuesta rápida, búsqueda web incluida)
-                                ├─ Floot AI · gemini-3.5-transcribe (voz → texto, para Android Auto)
+                                ├─ Claude (API de Anthropic, tu llave)  ─┐ modelo seleccionable
+                                ├─ ChatGPT (API de OpenAI, tu llave)    ─┘ (con búsqueda web)
+                                ├─ OpenAI gpt-4o-mini-transcribe (voz del auto → texto)
                                 ├─ OpenStreetMap Overpass  (lugares cercanos, gratis, sin llave)
                                 └─ OpenStreetMap Nominatim (direcciones / destinos)
 ```
@@ -50,6 +51,9 @@ Respuesta (formato superjson, el contenido está en `json`):
   "places": [{ "id": "node/6579275785", "name": "Pemex", "lat": 19.427, "lng": -99.139, "distanceMeters": 882, "address": "Calle Simón Bolívar", "phone": null, "openingHours": null, "category": "fuel" }]
 }}
 ```
+
+Campo opcional `"model"`: `claude-opus-5-5` (predeterminado), `claude-sonnet-5-5`, `claude-haiku-4-5`,
+`gpt-6-luna` o `gpt-6.1-sol`. `GET /_api/assistant/models` lista los modelos y cuáles tienen llave conectada.
 
 `action.type` puede ser `none`, `navigate` (con `lat`/`lng` del destino), `show_places` o `call`.
 
@@ -105,7 +109,20 @@ edítalo en Floot y vuelve a publicar.
 - `endpoints/assistant/*` — endpoints públicos `chat` y `voice`.
 - `pages/_index.tsx` — UI web (modo oscuro, micrófono grande, accesos rápidos).
 
-La IA usa los créditos de Floot AI del dueño del proyecto (no hace falta API key).
+### Llaves de API (Claude y ChatGPT)
+
+La IA usa **tus propias llaves**, conectadas en Floot (nunca en el código):
+
+- `ANTHROPIC_API_KEY` — https://console.anthropic.com → API Keys
+- `OPENAI_API_KEY` — https://platform.openai.com/api-keys (también se usa para transcribir la voz del auto)
+
+> Importante: la suscripción de Claude (Pro/Max) y la de ChatGPT (Plus) **no incluyen la API**.
+> La API se paga aparte, por uso, con saldo en cada consola. Para gastar lo menos posible elige
+> **Claude Haiku 4.5** o **GPT-6 Luna** en el selector de modelo; cada pregunta cuesta fracciones de centavo
+> (más si usa búsqueda web).
+
+El modelo se elige en la app (chip arriba a la derecha), en la web (selector "Modelo") o en Android Auto
+(botón **Modelo**). Teléfono y auto comparten la misma elección.
 
 ## Seguridad al manejar
 
@@ -118,4 +135,3 @@ Android Auto. Escribir solo está disponible en el teléfono, estacionado.
   **POI / puntos de interés**); funciones de chat libre podrían requerir ajustes para aprobarse.
 - Proteger los endpoints con una llave de app o límites por dispositivo antes de compartir el APK
   públicamente (hoy cualquiera con la URL puede consumir créditos de IA).
-- Proveedores alternativos (Claude, Grok) con llaves propias.

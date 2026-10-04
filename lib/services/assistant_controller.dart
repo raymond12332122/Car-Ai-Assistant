@@ -21,6 +21,8 @@ class AssistantController extends ChangeNotifier {
         _location = location ?? LocationService();
 
   static const _historyKey = 'copiloto.history.v1';
+  /// Also read by the Android Auto screens (FlutterSharedPreferences, key "flutter.copiloto.model").
+  static const modelKey = 'copiloto.model';
 
   final AssistantApi _api;
   final VoiceService _voice;
@@ -32,11 +34,22 @@ class AssistantController extends ChangeNotifier {
   String? error;
   bool voiceEnabled = true;
   List<ChatMessage> history = [];
+  ModelCatalog? catalog;
+  String? selectedModel;
+
+  /// Model actually sent: the user's pick if its key is connected, else the server default.
+  String? get activeModel {
+    final c = catalog;
+    if (c == null) return selectedModel;
+    final picked = c.models.where((m) => m.id == selectedModel && m.available);
+    return picked.isNotEmpty ? picked.first.id : c.defaultModel;
+  }
 
   Future<void> init() async {
     await _voice.init();
     try {
       final prefs = await SharedPreferences.getInstance();
+      selectedModel = prefs.getString(modelKey);
       final raw = prefs.getString(_historyKey);
       if (raw != null) {
         history = (jsonDecode(raw) as List)
@@ -47,6 +60,25 @@ class AssistantController extends ChangeNotifier {
       history = [];
     }
     notifyListeners();
+    await refreshModels();
+  }
+
+  Future<void> refreshModels() async {
+    try {
+      catalog = await _api.models();
+    } catch (_) {
+      // Keep the last known catalog; chat still works with the server default.
+    }
+    notifyListeners();
+  }
+
+  Future<void> selectModel(String id) async {
+    selectedModel = id;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(modelKey, id);
+    } catch (_) {}
   }
 
   void _set(AssistantStatus s) {
@@ -94,6 +126,7 @@ class AssistantController extends ChangeNotifier {
       final reply = await _api.chat(
         messages: messages.length > 20 ? messages.sublist(messages.length - 20) : messages,
         location: location,
+        model: activeModel,
       );
       lastReply = reply;
       history = [

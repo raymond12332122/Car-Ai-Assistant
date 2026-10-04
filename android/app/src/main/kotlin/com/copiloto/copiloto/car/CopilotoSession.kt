@@ -27,6 +27,18 @@ class CopilotoSession : Session() {
 
     private val history = ArrayDeque<Turn>()
 
+    // Same storage the Flutter app's shared_preferences plugin uses, so the
+    // model picked on the phone is the one used in the car (and vice versa).
+    private val prefs by lazy {
+        carContext.getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
+    }
+
+    var selectedModel: String?
+        get() = prefs.getString("flutter.copiloto.model", null)
+        set(value) {
+            prefs.edit().putString("flutter.copiloto.model", value).apply()
+        }
+
     fun historySnapshot(): List<Turn> = synchronized(history) { history.toList() }
 
     fun remember(user: String, assistant: String) = synchronized(history) {

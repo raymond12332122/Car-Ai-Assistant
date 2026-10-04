@@ -11,6 +11,25 @@ const HISTORY_KEY = "copiloto.history.v1";
 const MAX_HISTORY = 12;
 const MAX_RECORDING_MS = 12000;
 
+type BrowserRecognition = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((e: any) => void) | null;
+  onerror: ((e: any) => void) | null;
+  onend: (() => void) | null;
+};
+
+/** Free in-browser speech recognition (Chrome / Edge / Safari), if present. */
+function createRecognition(): BrowserRecognition | null {
+  if (typeof window === "undefined") return null;
+  const Ctor = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+  return Ctor ? (new Ctor() as BrowserRecognition) : null;
+}
+
 type NativeBridge = { speak?: (text: string) => void; postMessage?: (msg: string) => void };
 declare global {
   interface Window {
@@ -67,7 +86,11 @@ export function speakText(text: string, language: string, onEnd?: () => void) {
   window.speechSynthesis.speak(u);
 }
 
-export function useCarAssistant(options: { language: string; voiceEnabled: boolean }) {
+export function useCarAssistant(options: {
+  language: string;
+  voiceEnabled: boolean;
+  model: string | null;
+}) {
   const [history, setHistory] = useState<ChatMessage[]>(() => loadHistory());
   const [status, setStatus] = useState<AssistantStatus>("idle");
   const [last, setLast] = useState<OutputType | null>(null);
@@ -75,6 +98,7 @@ export function useCarAssistant(options: { language: string; voiceEnabled: boole
   const [error, setError] = useState<string | null>(null);
   const [location, setLocation] = useState<GeoLocation | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<BrowserRecognition | null>(null);
   const stopTimerRef = useRef<number | null>(null);
   const historyRef = useRef(history);
   historyRef.current = history;
@@ -143,6 +167,7 @@ export function useCarAssistant(options: { language: string; voiceEnabled: boole
           location: locationRef.current,
           language: optionsRef.current.language,
           surface: "phone",
+          model: optionsRef.current.model,
         });
         handleResult(result, trimmed);
       } catch (err) {
@@ -168,6 +193,7 @@ export function useCarAssistant(options: { language: string; voiceEnabled: boole
           location: locationRef.current,
           language: optionsRef.current.language,
           surface: "phone",
+          model: optionsRef.current.model,
         });
         setTranscript(result.transcript);
         handleResult(result, result.transcript);
@@ -181,6 +207,7 @@ export function useCarAssistant(options: { language: string; voiceEnabled: boole
   const stopListening = useCallback(() => {
     if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
     stopTimerRef.current = null;
+    recognitionRef.current?.stop();
     const rec = recorderRef.current;
     if (rec && rec.state !== "inactive") rec.stop();
   }, []);
@@ -188,6 +215,36 @@ export function useCarAssistant(options: { language: string; voiceEnabled: boole
   const startListening = useCallback(async () => {
     setError(null);
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+
+    // Prefer the browser's own recognizer: free and needs no OpenAI key.
+    const recognition = createRecognition();
+    if (recognition) {
+      let finalText = "";
+      recognition.lang = optionsRef.current.language;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.continuous = false;
+      recognition.onresult = (e: any) => {
+        let text = "";
+        for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+        setTranscript(text);
+        if (e.results[e.results.length - 1].isFinal) finalText = text;
+      };
+      recognition.onerror = (e: any) => {
+        if (e.error === "not-allowed") setError("Permite el micrófono para hablar con Copiloto.");
+      };
+      recognition.onend = () => {
+        recognitionRef.current = null;
+        if (finalText.trim()) void ask(finalText);
+        else setStatus((s) => (s === "listening" ? "idle" : s));
+      };
+      recognitionRef.current = recognition;
+      setTranscript(null);
+      setStatus("listening");
+      recognition.start();
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
@@ -212,7 +269,7 @@ export function useCarAssistant(options: { language: string; voiceEnabled: boole
       setError("Permite el micrófono para hablar con Copiloto.");
       setStatus("error");
     }
-  }, [sendAudio, stopListening]);
+  }, [ask, sendAudio, stopListening]);
 
   const toggleListening = useCallback(() => {
     if (status === "listening") stopListening();

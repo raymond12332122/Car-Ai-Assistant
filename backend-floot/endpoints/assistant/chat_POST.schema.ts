@@ -18,6 +18,8 @@ export const schema = z.object({
   language: z.string().min(2).max(10).default("es-MX"),
   // "car" = Android Auto / driving: very short spoken answers.
   surface: z.enum(["car", "phone", "web"]).default("web"),
+  // One of assistantModels.list ids; omitted = server default.
+  model: z.string().max(60).nullish(),
 });
 
 export type InputType = z.input<typeof schema>;
@@ -52,6 +54,8 @@ export type OutputType = {
   speech: string;
   action: AssistantAction;
   places: Place[];
+  /** Model that produced the answer. */
+  model: string;
   /** Transcript of the user's audio, only set by /assistant/voice. */
   transcript?: string;
 };

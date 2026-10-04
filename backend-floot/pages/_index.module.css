@@ -73,6 +73,28 @@
   margin: 0 auto;
 }
 
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.modelLabel {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+}
+
+.modelTrigger {
+  flex: 1;
+  max-width: 26rem;
+  min-height: 3rem;
+  font-size: 1rem;
+  border-radius: var(--radius-md);
+}
+
 .conversation {
   display: flex;
   flex-direction: column;
