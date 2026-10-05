@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Copiloto brag</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Bricolage Grotesque"; font-weight: 600; src: url("assets/fonts/bricolage-600.ttf") format("truetype"); }
+      @font-face { font-family: "Bricolage Grotesque"; font-weight: 800; src: url("assets/fonts/bricolage-800.ttf") format("truetype"); }
+      @font-face { font-family: "Inter Tight"; font-weight: 500; src: url("assets/fonts/intertight-500.ttf") format("truetype"); }
+      @font-face { font-family: "Inter Tight"; font-weight: 700; src: url("assets/fonts/intertight-700.ttf") format("truetype"); }
+
+      :root {
+        --bg: #0b0f16;
+        --surface: #131a24;
+        --card: #18202c;
+        --border: #2a3341;
+        --cyan: #2ee6f6;
+        --on-cyan: #071318;
+        --muted: #9aa6b5;
+        --amber: #ffb224;
+        --green: #3ccb86;
+        --fg: #eef3f8;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+      body { color: var(--fg); font-family: "Inter Tight", sans-serif; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+      .display { font-family: "Bricolage Grotesque", sans-serif; letter-spacing: -0.02em; }
+      .num { font-variant-numeric: tabular-nums; }
+      svg.ic { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+
+      /* persistent night-drive backdrop */
+      #bg { position: absolute; inset: 0; }
+      #glow { position: absolute; inset: 0; background: radial-gradient(70% 55% at 50% 8%, rgba(46, 230, 246, 0.13), transparent 70%); }
+      #road-wrap { position: absolute; left: 0; right: 0; bottom: 0; height: 520px; perspective: 520px; overflow: hidden; opacity: 0.32; }
+      #road {
+        position: absolute; left: 50%; bottom: -200px; width: 1400px; height: 1500px; margin-left: -700px;
+        transform: rotateX(72deg); transform-origin: 50% 100%;
+        background:
+          linear-gradient(90deg, transparent 0 49.4%, transparent 49.4% 50.6%, transparent 50.6%),
+          repeating-linear-gradient(180deg, rgba(46, 230, 246, 0.9) 0 70px, transparent 70px 170px);
+        background-size: 100% 100%, 16px 170px;
+        background-repeat: no-repeat, repeat-y;
+        background-position: 0 0, 50% 0;
+        -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 85%);
+        mask-image: linear-gradient(to top, #000 10%, transparent 85%);
+      }
+      #road-edges { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 6%, rgba(154, 166, 181, 0.35) 6% 6.4%, transparent 6.4% 93.6%, rgba(154, 166, 181, 0.35) 93.6% 94%, transparent 94%); }
+      #vignette { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.6)); }
+
+      .clip { position: absolute; inset: 0; }
+      .center { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+
+      /* S1 hook */
+      .s1-label { font-size: 26px; font-weight: 700; letter-spacing: 0.22em; color: var(--muted); }
+      .s1-speed { display: flex; align-items: baseline; gap: 22px; margin-top: 70px; }
+      #s1-num { font-size: 300px; font-weight: 800; line-height: 0.9; width: 520px; text-align: right; }
+      .s1-unit { font-size: 64px; font-weight: 600; color: var(--muted); }
+      .s1-lines { margin-top: 56px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+      .s1-line { font-size: 64px; font-weight: 600; }
+      #s1-l2 { color: var(--amber); display: flex; align-items: center; gap: 22px; }
+      #s1-fuel { width: 72px; height: 72px; color: var(--amber); }
+
+      /* S2 reveal */
+      .brand-row { display: flex; align-items: center; gap: 40px; }
+      .brand-dot { width: 84px; height: 84px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 60px 14px rgba(46, 230, 246, 0.45); }
+      .brand-name { font-size: 230px; font-weight: 800; line-height: 1; }
+      #s2-sub { margin-top: 36px; font-size: 54px; font-weight: 500; color: var(--muted); }
+      #s2-talk { margin-top: 20px; font-size: 64px; font-weight: 700; color: var(--cyan); }
+
+      /* S3 phone */
+      .split { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 120px; }
+      .phone { width: 560px; height: 960px; border-radius: 64px; background: var(--bg); border: 2px solid var(--border); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.7), inset 0 0 0 10px #05070b; padding: 54px 40px 40px; display: flex; flex-direction: column; gap: 22px; position: relative; overflow: hidden; }
+      .phone::before { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 50% at 50% 0%, rgba(46, 230, 246, 0.09), transparent 60%); }
+      .p-head { display: flex; align-items: center; justify-content: space-between; position: relative; }
+      .p-brand { display: flex; align-items: center; gap: 12px; font-size: 32px; font-weight: 800; }
+      .p-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 14px 2px rgba(46, 230, 246, 0.45); }
+      .p-gps { font-size: 20px; font-weight: 700; color: var(--green); border: 1px solid var(--border); border-radius: 999px; padding: 6px 16px; }
+      .p-status { position: relative; font-size: 20px; font-weight: 700; letter-spacing: 0.1em; color: var(--cyan); height: 26px; margin-top: 18px; }
+      .p-status span { position: absolute; left: 0; top: 0; white-space: nowrap; }
+      .p-transcript { position: relative; font-size: 26px; font-style: italic; color: var(--muted); min-height: 34px; }
+      .p-reply { position: relative; font-size: 38px; font-weight: 600; line-height: 1.18; }
+      .place { position: relative; background: var(--card); border: 1px solid rgba(46, 230, 246, 0.6); border-radius: 26px; padding: 22px 24px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 0 30px rgba(46, 230, 246, 0.12); }
+      .place-top { display: flex; align-items: center; justify-content: space-between; }
+      .place-name { font-size: 32px; font-weight: 800; }
+      .place-dist { font-size: 30px; font-weight: 800; color: var(--cyan); }
+      .place-addr { font-size: 21px; color: var(--muted); }
+      .place-go { margin-top: 6px; height: 60px; border-radius: 18px; background: var(--cyan); color: var(--on-cyan); font-size: 22px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
+      .place-go svg { width: 24px; height: 24px; }
+      .p-mic-wrap { margin-top: auto; position: relative; height: 150px; display: flex; align-items: center; justify-content: center; }
+      .p-ring { position: absolute; width: 130px; height: 130px; border-radius: 50%; border: 3px solid var(--cyan); }
+      .p-mic { position: relative; width: 130px; height: 130px; border-radius: 50%; background: var(--cyan); color: var(--on-cyan); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 50px 8px rgba(46, 230, 246, 0.4); }
+      .p-mic svg { width: 56px; height: 56px; }
+      .side { width: 860px; display: flex; flex-direction: column; gap: 28px; }
+      .side-kicker { font-size: 26px; font-weight: 700; letter-spacing: 0.2em; color: var(--cyan); }
+      .side-title { font-size: 100px; font-weight: 800; line-height: 1; }
+      .side-sub { font-size: 40px; color: var(--muted); line-height: 1.25; }
+
+      /* S4 android auto */
+      .aa { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 48px; }
+      .aa-title { font-size: 84px; font-weight: 800; text-align: center; }
+      .aa-kicker { font-size: 26px; font-weight: 700; letter-spacing: 0.2em; color: var(--cyan); text-align: center; margin-bottom: 14px; }
+      .aa-screen { width: 1480px; padding: 36px; border-radius: 36px; background: #070a10; border: 2px solid var(--border); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.7); display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+      .tile { height: 200px; border-radius: 26px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; font-size: 32px; font-weight: 700; }
+      .tile svg { width: 64px; height: 64px; color: var(--fg); }
+      .tile.talk { background: var(--cyan); color: var(--on-cyan); border-color: var(--cyan); box-shadow: 0 0 40px rgba(46, 230, 246, 0.35); }
+      .tile.talk svg { color: var(--on-cyan); }
+
+      /* S5 nav */
+      .nav { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; }
+      #s5-quote { font-size: 64px; font-style: italic; font-weight: 500; color: var(--muted); height: 80px; white-space: nowrap; }
+      .navcard { width: 1240px; padding: 48px 56px; border-radius: 36px; background: var(--card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 40px; box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6); }
+      .nav-label { font-size: 22px; font-weight: 700; letter-spacing: 0.18em; color: var(--muted); }
+      .nav-name { font-size: 60px; font-weight: 800; margin-top: 8px; line-height: 1.05; }
+      .nav-addr { font-size: 26px; color: var(--muted); margin-top: 10px; }
+      .nav-btns { display: flex; flex-direction: column; gap: 16px; flex-shrink: 0; }
+      .btn { height: 84px; padding: 0 40px; border-radius: 22px; font-size: 30px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 14px; }
+      .btn svg { width: 30px; height: 30px; }
+      .btn.go { background: var(--cyan); color: var(--on-cyan); box-shadow: 0 0 40px rgba(46, 230, 246, 0.35); }
+      .btn.sec { background: var(--surface); border: 1px solid var(--border); }
+      #s5-cap { font-size: 52px; font-weight: 700; }
+
+      /* S6 brains */
+      .brains { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 56px; }
+      .brains-title { font-size: 112px; font-weight: 800; }
+      .chips { display: flex; gap: 32px; }
+      .chip { height: 120px; padding: 0 56px; border-radius: 999px; border: 2px solid var(--border); background: var(--card); display: flex; align-items: center; gap: 18px; font-size: 48px; font-weight: 700; }
+      .chip small { font-size: 28px; font-weight: 700; color: var(--on-cyan); background: var(--cyan); border-radius: 999px; padding: 6px 18px; }
+      .chip.on { border-color: var(--cyan); box-shadow: 0 0 44px rgba(46, 230, 246, 0.3); }
+      .brains-sub { font-size: 38px; color: var(--muted); }
+      .brains-sub b { color: var(--fg); font-weight: 700; }
+
+      /* S7 outro */
+      .outro { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; }
+      .input-wrap { position: relative; }
+      .input { width: 900px; height: 100px; border-radius: 26px; border: 2px solid var(--border); background: var(--surface); display: flex; align-items: center; padding: 0 36px; font-size: 38px; color: var(--muted); }
+      #s7-strike { position: absolute; left: 24px; top: 48px; height: 6px; width: 852px; border-radius: 3px; background: var(--amber); transform-origin: 0 50%; }
+      #s7-punch { font-size: 210px; font-weight: 800; line-height: 1; }
+      #s7-punch span { color: var(--cyan); }
+      .outro-brand { display: flex; align-items: center; gap: 22px; }
+      .outro-brand .brand-dot { width: 40px; height: 40px; box-shadow: 0 0 30px 6px rgba(46, 230, 246, 0.45); }
+      .outro-brand .name { font-size: 72px; font-weight: 800; }
+      .outro-url { font-size: 34px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="23.5" data-width="1920" data-height="1080">
+      <!-- backdrop (whole film) -->
+      <div id="bg" class="clip" data-start="0" data-duration="23.5" data-track-index="0">
+        <div id="glow"></div>
+        <div id="road-wrap" data-layout-allow-overflow><div id="road" data-layout-allow-overflow><div id="road-edges"></div></div></div>
+        <div id="vignette"></div>
+      </div>
+
+      <!-- S1 hook -->
+      <section id="s1" class="clip" data-start="0" data-duration="3" data-track-index="1">
+        <div class="center" id="s1-in">
+          <div class="s1-label" id="s1-label">VELOCIDAD</div>
+          <div class="s1-speed">
+            <div id="s1-num" class="display num">0</div>
+            <div class="s1-unit display">km/h</div>
+          </div>
+          <div class="s1-lines">
+            <div class="s1-line display" id="s1-l1">Vas por la autopista.</div>
+            <div class="s1-line display" id="s1-l2">
+              <svg id="s1-fuel" class="ic" viewBox="0 0 24 24"><line x1="3" x2="15" y1="22" y2="22" /><line x1="4" x2="14" y1="9" y2="9" /><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18" /><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5" /></svg>
+              <span>…y la gasolina, en reserva.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S2 reveal -->
+      <section id="s2" class="clip" data-start="3" data-duration="3" data-track-index="1">
+        <div class="center">
+          <div class="brand-row">
+            <div class="brand-dot" id="s2-dot"></div>
+            <div class="brand-name display" id="s2-name">Copiloto</div>
+          </div>
+          <div id="s2-sub">Asistente IA para tu auto.</div>
+          <div id="s2-talk" class="display">Solo háblale.</div>
+        </div>
+      </section>
+
+      <!-- S3 voice → places -->
+      <section id="s3" class="clip" data-start="6" data-duration="4.5" data-track-index="1">
+        <div class="split">
+          <div class="phone" id="s3-phone">
+            <div class="p-head">
+              <div class="p-brand display"><span class="p-dot"></span>Copiloto</div>
+              <div class="p-gps num">100 km/h</div>
+            </div>
+            <div class="p-status" data-layout-allow-overlap>
+              <span id="s3-st1">ESCUCHANDO… TOCA PARA TERMINAR</span>
+              <span id="s3-st2">RESPONDIENDO</span>
+            </div>
+            <div class="p-transcript" id="s3-tr"></div>
+            <div class="p-reply display" id="s3-reply">La Pemex más cercana está en Calle Simón Bolívar, a 882 metros.</div>
+            <div class="place" id="s3-place">
+              <div class="place-top"><div class="place-name">Pemex</div><div class="place-dist num">882 m</div></div>
+              <div class="place-addr">Calle Simón Bolívar</div>
+              <div class="place-go"><svg class="ic" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11" /></svg>Ir</div>
+            </div>
+            <div class="p-mic-wrap">
+              <div class="p-ring" id="s3-ring1"></div>
+              <div class="p-ring" id="s3-ring2"></div>
+              <div class="p-mic" id="s3-mic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg></div>
+            </div>
+          </div>
+          <div class="side" id="s3-side">
+            <div class="side-kicker">MANOS AL VOLANTE</div>
+            <div class="side-title display">Pídelo con la voz.</div>
+            <div class="side-sub">Encuentra lo más cercano y te contesta en voz alta, corto y claro.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S4 android auto -->
+      <section id="s4" class="clip" data-start="10.5" data-duration="3.5" data-track-index="1">
+        <div class="aa">
+          <div id="s4-head">
+            <div class="aa-kicker">ANDROID AUTO</div>
+            <div class="aa-title display">También en la pantalla de tu auto.</div>
+          </div>
+          <div class="aa-screen" id="s4-screen">
+            <div class="tile"><svg class="ic" viewBox="0 0 24 24"><line x1="3" x2="15" y1="22" y2="22" /><line x1="4" x2="14" y1="9" y2="9" /><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18" /><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5" /></svg>Gasolina</div>
+            <div class="tile"><svg class="ic" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" /></svg>Cargador</div>
+            <div class="tile"><svg class="ic" viewBox="0 0 24 24"><path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8" /><path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7" /><path d="m2.1 21.8 6.4-6.3" /><path d="m19 5-7 7" /></svg>Comida</div>
+            <div class="tile"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M9 17V7h4a3 3 0 0 1 0 6H9" /></svg>Estacionar</div>
+            <div class="tile"><svg class="ic" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>Taller</div>
+            <div class="tile"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h4a1 1 0 0 1 1 1v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a1 1 0 0 1 1-1h4a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-4a1 1 0 0 1-1-1V4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4a1 1 0 0 1-1 1z" /></svg>Hospital</div>
+            <div class="tile"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="M20 12h2" /><path d="m19.07 4.93-1.41 1.41" /><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128" /><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" /></svg>Clima</div>
+            <div class="tile talk"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg>Hablar</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- S5 navigate -->
+      <section id="s5" class="clip" data-start="14" data-duration="3.5" data-track-index="1">
+        <div class="nav">
+          <div id="s5-quote"></div>
+          <div class="navcard" id="s5-card">
+            <div>
+              <div class="nav-label">DESTINO</div>
+              <div class="nav-name display">Ángel de la Independencia</div>
+              <div class="nav-addr">Paseo de la Reforma, Ciudad de México</div>
+            </div>
+            <div class="nav-btns">
+              <div class="btn go" id="s5-go"><svg class="ic" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11" /></svg>Iniciar navegación</div>
+              <div class="btn sec">Waze</div>
+            </div>
+          </div>
+          <div id="s5-cap" class="display">Google Maps o Waze, con un toque.</div>
+        </div>
+      </section>
+
+      <!-- S6 brains -->
+      <section id="s6" class="clip" data-start="17.5" data-duration="3" data-track-index="1">
+        <div class="brains">
+          <div class="brains-title display" id="s6-title">Tú eliges el cerebro.</div>
+          <div class="chips">
+            <div class="chip on" id="s6-c1">Gemini <small>GRATIS</small></div>
+            <div class="chip" id="s6-c2">Claude</div>
+            <div class="chip" id="s6-c3">ChatGPT</div>
+          </div>
+          <div class="brains-sub" id="s6-sub">Clima con <b>Open-Meteo</b> · Lugares con <b>OpenStreetMap</b> · sin llaves</div>
+        </div>
+      </section>
+
+      <!-- S7 outro -->
+      <section id="s7" class="clip" data-start="20.5" data-duration="3" data-track-index="1">
+        <div class="outro">
+          <div class="input-wrap" id="s7-input" data-layout-allow-occlusion>
+            <div class="input">Escribe (solo estacionado)…</div>
+            <div id="s7-strike"></div>
+          </div>
+          <div id="s7-punch" class="display">Tú <span>maneja.</span></div>
+          <div id="s7-foot" style="display: flex; flex-direction: column; align-items: center; gap: 14px">
+            <div class="outro-brand"><div class="brand-dot"></div><div class="name display">Copiloto</div></div>
+            <div class="outro-url">copiloto-car-ai.floot.app</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- audio -->
+      <audio id="music" src="assets/music/night-drive.mp3" data-start="0" data-duration="23.5" data-track-index="5" data-volume="0.8"></audio>
+      <audio id="sfx-riser" src="assets/sfx/riser.mp3" data-start="1.2" data-duration="1.8" data-track-index="6" data-volume="0.35" data-fade-out="0.2"></audio>
+      <audio id="sfx-drop" src="assets/sfx/impact-bass-1.mp3" data-start="3" data-duration="1.5" data-track-index="7" data-volume="0.6"></audio>
+      <audio id="sfx-tap" src="assets/sfx/click-soft.mp3" data-start="6.05" data-duration="0.37" data-track-index="6" data-volume="0.6"></audio>
+      <audio id="sfx-ping" src="assets/sfx/ping.mp3" data-start="7.6" data-duration="1" data-track-index="7" data-volume="0.4"></audio>
+      <audio id="sfx-whoosh1" src="assets/sfx/whoosh-short.mp3" data-start="10.45" data-duration="0.57" data-track-index="6" data-volume="0.45"></audio>
+      <audio id="sfx-pop" src="assets/sfx/pop.mp3" data-start="12.3" data-duration="0.6" data-track-index="7" data-volume="0.4"></audio>
+      <audio id="sfx-whoosh2" src="assets/sfx/whoosh.mp3" data-start="13.95" data-duration="0.57" data-track-index="6" data-volume="0.4"></audio>
+      <audio id="sfx-chime" src="assets/sfx/chime.mp3" data-start="15.6" data-duration="1.2" data-track-index="7" data-volume="0.35"></audio>
+      <audio id="sfx-whoosh3" src="assets/sfx/whoosh-short.mp3" data-start="17.45" data-duration="0.57" data-track-index="6" data-volume="0.4"></audio>
+      <audio id="sfx-notif" src="assets/sfx/notification.mp3" data-start="18.3" data-duration="1" data-track-index="7" data-volume="0.3"></audio>
+      <audio id="sfx-impact" src="assets/sfx/impact-bass-1.mp3" data-start="21.5" data-duration="1.5" data-track-index="6" data-volume="0.55"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const E = "power3.out";
+
+      // backdrop: lane dashes stream toward camera all film long
+      tl.fromTo("#road", { backgroundPosition: "0px 0px, 50% 0px" }, { backgroundPosition: "0px 0px, 50% 3400px", duration: 23.5, ease: "none" }, 0);
+      tl.fromTo("#glow", { opacity: 0.6 }, { opacity: 1, duration: 3, ease: "sine.inOut" }, 0);
+
+      // S1 hook — speed count-up, then fuel warning
+      tl.fromTo("#s1-label", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, ease: E }, 0.05);
+      const sp = { v: 0 };
+      const numEl = document.getElementById("s1-num");
+      tl.fromTo(sp, { v: 0 }, { v: 100, duration: 1.1, ease: "power2.out", onUpdate: () => { numEl.textContent = Math.round(sp.v); } }, 0.05);
+      tl.fromTo("#s1-l1", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 0.3);
+      tl.to("#s1-l1", { opacity: 0.35, duration: 0.3 }, 1.35);
+      tl.fromTo("#s1-l2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: E }, 1.35);
+      tl.fromTo("#s1-fuel", { opacity: 1 }, { opacity: 0.25, duration: 0.25, repeat: 3, yoyo: true, ease: "none" }, 1.75);
+      tl.fromTo("#s1-in", { scale: 1 }, { scale: 1.06, duration: 3, ease: "none" }, 0);
+      tl.to("#s1-in", { opacity: 0, duration: 0.2 }, 2.8);
+
+      // S2 reveal — beat drop at 3.0
+      tl.fromTo("#s2-dot", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(2.2)" }, 3.0);
+      tl.fromTo("#s2-name", { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.55, ease: E }, 3.15);
+      tl.fromTo("#s2-sub", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 3.6);
+      tl.fromTo("#s2-talk", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 4.4);
+      tl.to(["#s2-dot", "#s2-name", "#s2-sub", "#s2-talk"], { opacity: 0, y: -20, duration: 0.25, ease: "power2.in", stagger: 0.02 }, 5.7);
+
+      // S3 voice → places
+      tl.fromTo("#s3-phone", { opacity: 0, y: 80 }, { opacity: 1, y: 0, duration: 0.55, ease: E }, 6.0);
+      tl.fromTo("#s3-side", { opacity: 0, x: 60 }, { opacity: 1, x: 0, duration: 0.55, ease: E }, 6.15);
+      tl.fromTo(["#s3-ring1", "#s3-ring2"], { scale: 1, opacity: 0.8 }, { scale: 1.7, opacity: 0, duration: 0.8, ease: "sine.out", stagger: 0.4, repeat: 1 }, 6.2);
+      tl.fromTo("#s3-st1", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 6.2);
+      const tr = document.getElementById("s3-tr");
+      const trText = "“Necesito gasolina”";
+      const ty = { p: 0 };
+      tl.fromTo(ty, { p: 0 }, { p: 1, duration: 0.7, ease: "none", immediateRender: false, onUpdate: () => { tr.textContent = trText.slice(0, Math.round(ty.p * trText.length)); } }, 6.45);
+      tl.to("#s3-st1", { opacity: 0, duration: 0.15 }, 7.5);
+      tl.fromTo("#s3-st2", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 7.55);
+      tl.fromTo("#s3-reply", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 7.6);
+      tl.fromTo("#s3-place", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 8.2);
+      tl.to(["#s3-phone", "#s3-side"], { opacity: 0, y: -30, duration: 0.25, ease: "power2.in" }, 10.25);
+
+      // S4 Android Auto — tiles cascade on eighth notes
+      tl.fromTo("#s4-head", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 10.5);
+      tl.fromTo("#s4-screen", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 10.6);
+      tl.fromTo("#s4-screen .tile", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.8)", stagger: 0.12 }, 10.85);
+      tl.fromTo("#s4-screen .talk", { boxShadow: "0 0 0px rgba(46,230,246,0)" }, { boxShadow: "0 0 70px rgba(46,230,246,0.65)", duration: 0.5, repeat: 1, yoyo: true, ease: "sine.inOut" }, 12.3);
+      tl.to(["#s4-head", "#s4-screen"], { opacity: 0, y: -30, duration: 0.25, ease: "power2.in" }, 13.75);
+
+      // S5 llévame a…
+      const q = document.getElementById("s5-quote");
+      const qText = "“Llévame al Ángel de la Independencia”";
+      const qy = { p: 0 };
+      tl.fromTo(q, { opacity: 0 }, { opacity: 1, duration: 0.15 }, 14.0);
+      tl.fromTo(qy, { p: 0 }, { p: 1, duration: 0.9, ease: "none", immediateRender: false, onUpdate: () => { q.textContent = qText.slice(0, Math.round(qy.p * qText.length)); } }, 14.05);
+      tl.fromTo("#s5-card", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: E }, 15.05);
+      tl.fromTo("#s5-go", { scale: 1 }, { scale: 1.06, duration: 0.25, repeat: 1, yoyo: true, ease: "sine.inOut" }, 15.6);
+      tl.fromTo("#s5-cap", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 15.5);
+      tl.to(["#s5-quote", "#s5-card", "#s5-cap"], { opacity: 0, y: -30, duration: 0.25, ease: "power2.in" }, 17.25);
+
+      // S6 brains
+      tl.fromTo("#s6-title", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 17.5);
+      tl.fromTo(["#s6-c1", "#s6-c2", "#s6-c3"], { opacity: 0, y: 40, rotationX: -70 }, { opacity: 1, y: 0, rotationX: 0, duration: 0.45, ease: E, stagger: 0.18 }, 17.85);
+      tl.fromTo("#s6-sub", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 18.6);
+      tl.to(["#s6-title", "#s6-c1", "#s6-c2", "#s6-c3", "#s6-sub"], { opacity: 0, y: -30, duration: 0.25, ease: "power2.in" }, 20.25);
+
+      // S7 outro — typing is for parked cars; the rest of the time, you drive
+      tl.fromTo("#s7-input", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: E }, 20.5);
+      tl.fromTo("#s7-strike", { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: "power2.inOut" }, 21.1);
+      tl.to("#s7-input", { opacity: 0.4, duration: 0.3 }, 21.45);
+      tl.fromTo("#s7-punch", { opacity: 0, scale: 1.25 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power4.out" }, 21.5);
+      tl.fromTo("#s7-foot", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 22.0);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

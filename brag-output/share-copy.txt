@@ -1,0 +1,25 @@
+=== X / Twitter ===
+Vas a 100 km/h y la gasolina en reserva. No sueltes el volante.
+
+Hice Copiloto: un asistente de IA por voz para manejar. Dile "necesito gasolina" o "llévame a…" y te contesta corto, en voz alta, y te manda a Google Maps o Waze.
+
+Funciona en el teléfono y en la pantalla del auto con Android Auto. Gratis por defecto.
+
+Tú maneja. 🚗
+copiloto-car-ai.floot.app
+
+=== LinkedIn ===
+Construí Copiloto, un asistente de IA por voz pensado para usarse mientras manejas.
+
+• Busca gasolineras, cargadores, comida, estacionamiento, talleres u hospitales cercanos
+• "Llévame a…" → navegación directa en Google Maps o Waze
+• Respuestas cortas y habladas, para no quitar los ojos del camino
+• App Flutter para el teléfono + pantallas nativas de Android Auto (Car App Library en Kotlin)
+• Gratis por defecto con Gemini, Open-Meteo y OpenStreetMap. Claude y ChatGPT disponibles con tu propia llave
+
+Escribir es solo para cuando estás estacionado. Lo demás se hace con la voz.
+
+copiloto-car-ai.floot.app
+
+=== Short caption ===
+Copiloto: IA por voz para tu auto. Tú maneja.
