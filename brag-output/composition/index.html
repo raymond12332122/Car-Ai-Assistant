@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Instrument Serif";
+        src: url("assets/fonts/InstrumentSerif-Regular.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: "Instrument Serif";
+        src: url("assets/fonts/InstrumentSerif-Italic.woff2") format("woff2");
+        font-weight: 400;
+        font-style: italic;
+      }
+      :root {
+        --bg: #0c0b0a;
+        --fg: #f1ece2;
+        --muted: #9a9286;
+        --line: #3a352e;
+        --accent: #d4a24c;
+        --serif: "Instrument Serif", Georgia, serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--serif);
+      }
+
+      /* ---------- persistent background ---------- */
+      .bg-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      #glow {
+        position: absolute;
+        width: 1500px;
+        height: 1500px;
+        left: 210px;
+        top: -210px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(212, 162, 76, 0.13) 0%, rgba(212, 162, 76, 0.04) 38%, rgba(12, 11, 10, 0) 68%);
+      }
+      #vignette {
+        background: radial-gradient(ellipse at center, rgba(12, 11, 10, 0) 45%, rgba(5, 4, 3, 0.75) 100%);
+      }
+      .rule-v {
+        position: absolute;
+        top: 0;
+        width: 1px;
+        height: 1080px;
+        background: var(--line);
+        opacity: 0.55;
+      }
+      #rule-l { left: 96px; }
+      #rule-r { left: 1823px; }
+      .corner {
+        position: absolute;
+        font-family: var(--mono);
+        font-size: 18px;
+        letter-spacing: 0.32em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      #corner-tl { left: 128px; top: 56px; }
+      #corner-tr { right: 128px; top: 56px; }
+      #corner-bl { left: 128px; bottom: 52px; }
+      #corner-br { right: 128px; bottom: 52px; }
+
+      /* ---------- stage + scenes ---------- */
+      #stage {
+        position: absolute;
+        inset: 0;
+      }
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 200px;
+      }
+      .label {
+        font-family: var(--mono);
+        font-size: 26px;
+        letter-spacing: 0.34em;
+        color: var(--accent);
+        text-transform: uppercase;
+        margin-bottom: 28px;
+      }
+      .headline {
+        font-size: 168px;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        font-weight: 400;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 44px;
+        margin-top: 56px;
+      }
+      .price {
+        font-family: var(--mono);
+        font-size: 52px;
+        font-weight: 500;
+        color: var(--fg);
+        border: 2px solid var(--line);
+        padding: 14px 28px;
+        letter-spacing: 0.02em;
+      }
+      .result {
+        position: relative;
+        font-style: italic;
+        font-size: 72px;
+        color: var(--fg);
+        display: inline-block;
+      }
+      .strike {
+        position: absolute;
+        left: -8px;
+        right: -8px;
+        top: 52%;
+        height: 5px;
+        background: var(--accent);
+        transform-origin: left center;
+        display: block;
+      }
+      .verdict {
+        font-family: var(--mono);
+        font-size: 22px;
+        letter-spacing: 0.3em;
+        color: var(--accent);
+        text-transform: uppercase;
+        border: 2px solid var(--accent);
+        padding: 10px 18px;
+      }
+
+      #s2 { align-items: flex-end; text-align: right; }
+
+      /* turn */
+      #s3 { align-items: center; text-align: center; }
+      .mini-row {
+        display: flex;
+        gap: 40px;
+        margin-bottom: 80px;
+      }
+      .mini {
+        position: relative;
+        border: 2px solid var(--line);
+        padding: 22px 36px;
+        font-family: var(--mono);
+        font-size: 26px;
+        color: var(--muted);
+        letter-spacing: 0.08em;
+      }
+      .mini .strike { top: 50%; height: 3px; }
+      #turn-line {
+        font-style: italic;
+        font-size: 176px;
+        line-height: 1;
+        color: var(--accent);
+        letter-spacing: -0.02em;
+      }
+
+      /* reveal */
+      #s4 { align-items: center; text-align: center; }
+      #name {
+        font-size: 300px;
+        line-height: 0.9;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding-left: 0.06em;
+      }
+      #name-rule {
+        width: 980px;
+        height: 2px;
+        background: var(--accent);
+        margin: 48px auto 40px;
+        transform-origin: center;
+        display: block;
+      }
+      #name-tag {
+        font-family: var(--mono);
+        font-size: 28px;
+        letter-spacing: 0.38em;
+        color: var(--fg);
+        text-transform: uppercase;
+      }
+
+      /* highlights */
+      .hl {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 80px;
+      }
+      .hl-text {
+        width: 760px;
+        flex: none;
+      }
+      .hl-index {
+        font-family: var(--mono);
+        font-size: 24px;
+        letter-spacing: 0.3em;
+        color: var(--accent);
+        margin-bottom: 30px;
+      }
+      .hl-head {
+        font-size: 112px;
+        line-height: 1.02;
+        letter-spacing: -0.015em;
+      }
+      .hl-head em { color: var(--accent); }
+      .hl-vis {
+        width: 760px;
+        transform-origin: center;
+        height: 520px;
+        flex: none;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* devices */
+      .devices {
+        display: flex;
+        align-items: flex-end;
+        gap: 44px;
+      }
+      .dev { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+      .dev-cap {
+        font-family: var(--mono);
+        font-size: 20px;
+        letter-spacing: 0.26em;
+        color: var(--muted);
+      }
+      .phone {
+        width: 150px;
+        height: 300px;
+        border: 3px solid var(--fg);
+        border-radius: 28px;
+        position: relative;
+        padding: 26px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .phone::before {
+        content: "";
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        width: 40px;
+        margin-left: -20px;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--line);
+      }
+      .browser {
+        width: 300px;
+        height: 220px;
+        border: 3px solid var(--fg);
+        border-radius: 12px;
+        padding: 40px 18px 18px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .browser::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 26px;
+        height: 2px;
+        background: var(--line);
+      }
+      .dots { position: absolute; top: 9px; left: 14px; display: flex; gap: 7px; }
+      .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: block; }
+      .car {
+        width: 220px;
+        height: 150px;
+        border: 3px solid var(--fg);
+        border-radius: 18px 18px 40px 40px;
+        padding: 18px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .bar { height: 14px; border-radius: 3px; background: var(--line); display: block; }
+      .bar.acc { background: var(--accent); }
+      .tile { border-radius: 6px; background: var(--line); display: block; }
+      .tile.acc { background: var(--accent); }
+
+      /* models */
+      .models {
+        display: flex;
+        align-items: center;
+        gap: 0;
+      }
+      .chips { display: flex; flex-direction: column; gap: 34px; }
+      .chip {
+        font-family: var(--mono);
+        font-size: 26px;
+        letter-spacing: 0.18em;
+        border: 2px solid var(--fg);
+        border-radius: 40px;
+        padding: 16px 30px;
+        text-align: center;
+        width: 250px;
+      }
+      .wires { width: 120px; height: 300px; position: relative; }
+      .wire {
+        position: absolute;
+        left: 0;
+        width: 120px;
+        height: 2px;
+        background: var(--accent);
+        transform-origin: left center;
+        display: block;
+      }
+      .appcard {
+        width: 320px;
+        border: 2px solid var(--accent);
+        padding: 30px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .appcard-t {
+        font-family: var(--mono);
+        font-size: 22px;
+        letter-spacing: 0.24em;
+        color: var(--accent);
+      }
+      .appcard-b { font-size: 44px; line-height: 1.1; font-style: italic; }
+
+      /* terminal */
+      .term {
+        width: 720px;
+        border: 2px solid var(--line);
+        border-radius: 14px;
+        background: #13110f;
+        padding: 0 0 34px;
+        font-family: var(--mono);
+        font-size: 28px;
+      }
+      .term-top {
+        height: 50px;
+        border-bottom: 2px solid var(--line);
+        position: relative;
+        margin-bottom: 30px;
+      }
+      .term-top .dots { top: 19px; left: 20px; }
+      .tl {
+        padding: 8px 40px;
+        display: flex;
+        justify-content: space-between;
+        color: var(--fg);
+      }
+      .tl .ok { color: var(--accent); }
+      .tl .dim { color: var(--muted); }
+      .tl.live { margin-top: 18px; color: var(--accent); justify-content: flex-start; gap: 18px; align-items: center; }
+      .live-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); display: block; }
+
+      .glyph { display: inline-block; }
+
+      /* outro */
+      #s8, #s9 { align-items: center; text-align: center; }
+      #claims {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        align-items: center;
+      }
+      .claim { font-size: 132px; line-height: 1.02; letter-spacing: -0.015em; display: block; white-space: nowrap; }
+      .claim.acc { color: var(--accent); font-style: italic; }
+      #lockup {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      #lock-name {
+        font-size: 220px;
+        line-height: 0.9;
+        letter-spacing: 0.06em;
+        padding-left: 0.06em;
+        text-transform: uppercase;
+      }
+      #lock-rule { width: 720px; height: 2px; background: var(--accent); margin: 44px auto 38px; display: block; transform-origin: center; }
+      #lock-cta {
+        font-family: var(--mono);
+        font-size: 32px;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--fg);
+      }
+      #lock-cta b { color: var(--accent); font-weight: 500; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="23" data-width="1920" data-height="1080">
+      <!-- background (always on) -->
+      <div class="bg-layer"><div id="glow"></div></div>
+      <div class="bg-layer" id="vignette"></div>
+      <div id="rule-l" class="rule-v"></div>
+      <div id="rule-r" class="rule-v"></div>
+      <div id="corner-tl" class="corner">Raymundo</div>
+      <div id="corner-tr" class="corner">Apps &amp; AI</div>
+      <div id="corner-bl" class="corner">Independent builder</div>
+      <div id="corner-br" class="corner">Fair price · Real results</div>
+
+      <div id="stage">
+        <!-- 1 · Option A -->
+        <section id="s1" class="scene clip" data-start="0" data-duration="3.3" data-track-index="1">
+          <div id="s1-in">
+            <div class="label" id="s1-label">Option A</div>
+            <h1 class="headline" id="s1-head">The cheap developer.</h1>
+            <div class="row">
+              <div class="price" id="s1-price">$300</div>
+              <div class="result" id="s1-result">Broken app. Gone in a week.<span class="strike" id="s1-strike"></span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2 · Option B -->
+        <section id="s2" class="scene clip" data-start="3.3" data-duration="3.3" data-track-index="1">
+          <div id="s2-in">
+            <div class="label" id="s2-label">Option B</div>
+            <h1 class="headline" id="s2-head">The expensive agency.</h1>
+            <div class="row" style="justify-content: flex-end">
+              <div class="result" id="s2-result">Six months. Mid results.<span class="strike" id="s2-strike"></span></div>
+              <div class="price" id="s2-price">$40,000</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3 · The turn -->
+        <section id="s3" class="scene clip" data-start="6.6" data-duration="2.6" data-track-index="1">
+          <div class="mini-row" id="s3-minis">
+            <div class="mini" id="mini-a">A · $300 · BROKEN<span class="strike"></span></div>
+            <div class="mini" id="mini-b">B · $40,000 · MID<span class="strike"></span></div>
+          </div>
+          <div id="turn-line">There’s a third option.</div>
+        </section>
+
+        <!-- 4 · Reveal -->
+        <section id="s4" class="scene clip" data-start="9.2" data-duration="2.8" data-track-index="1">
+          <div id="s4-in">
+            <div id="name">Raymundo</div>
+            <span id="name-rule"></span>
+            <div id="name-tag">Apps &amp; AI — built right, shipped live</div>
+          </div>
+        </section>
+
+        <!-- 5 · Highlight 1 -->
+        <section id="s5" class="scene hl clip" data-start="12" data-duration="2.4" data-track-index="1">
+          <div class="hl-text">
+            <div class="hl-index" id="s5-idx">01 / 03 — EVERY SCREEN</div>
+            <div class="hl-head" id="s5-head">Phone. Web. Even your <em>car’s dashboard.</em></div>
+          </div>
+          <div class="hl-vis">
+            <div class="devices">
+              <div class="dev" id="dev-phone">
+                <div class="phone"><span class="bar acc" style="width: 70%"></span><span class="bar"></span><span class="bar" style="width: 80%"></span><span class="bar" style="width: 60%"></span></div>
+                <div class="dev-cap">MOBILE</div>
+              </div>
+              <div class="dev" id="dev-web">
+                <div class="browser"><div class="dots"><i></i><i></i><i></i></div><span class="bar acc" style="width: 50%"></span><span class="bar"></span><span class="bar" style="width: 85%"></span><span class="bar" style="width: 65%"></span></div>
+                <div class="dev-cap">WEB</div>
+              </div>
+              <div class="dev" id="dev-car">
+                <div class="car"><span class="tile acc"></span><span class="tile"></span><span class="tile"></span><span class="tile"></span></div>
+                <div class="dev-cap">IN-CAR</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6 · Highlight 2 -->
+        <section id="s6" class="scene hl clip" data-start="14.4" data-duration="2.4" data-track-index="1">
+          <div class="hl-text">
+            <div class="hl-index" id="s6-idx">02 / 03 — REAL AI</div>
+            <div class="hl-head" id="s6-head">Real AI. <em>Not a demo.</em></div>
+          </div>
+          <div class="hl-vis">
+            <div class="models">
+              <div class="chips">
+                <div class="chip" id="chip-1">CLAUDE</div>
+                <div class="chip" id="chip-2">GEMINI</div>
+                <div class="chip" id="chip-3">CHATGPT</div>
+              </div>
+              <div class="wires">
+                <span class="wire" id="wire-1" style="top: 38px; transform: rotate(22deg)"></span>
+                <span class="wire" id="wire-2" style="top: 149px"></span>
+                <span class="wire" id="wire-3" style="top: 260px; transform: rotate(-22deg)"></span>
+              </div>
+              <div class="appcard" id="appcard">
+                <div class="appcard-t">YOUR APP</div>
+                <div class="appcard-b">Talks, listens, answers.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7 · Highlight 3 -->
+        <section id="s7" class="scene hl clip" data-start="16.8" data-duration="2.4" data-track-index="1">
+          <div class="hl-text">
+            <div class="hl-index" id="s7-idx">03 / 03 — SHIPPED</div>
+            <div class="hl-head" id="s7-head">Built. Deployed. <em>Live.</em></div>
+          </div>
+          <div class="hl-vis">
+            <div class="term" id="term">
+              <div class="term-top"><div class="dots"><i></i><i></i><i></i></div></div>
+              <div class="tl" id="tl-0"><span class="dim">$ ship --prod</span></div>
+              <div class="tl" id="tl-1"><span><span class="ok">✓</span> mobile app</span><span class="dim">built</span></div>
+              <div class="tl" id="tl-2"><span><span class="ok">✓</span> backend</span><span class="dim">deployed</span></div>
+              <div class="tl" id="tl-3"><span><span class="ok">✓</span> AI models</span><span class="dim">connected</span></div>
+              <div class="tl live" id="tl-4"><span class="live-dot" id="live-dot"></span>LIVE</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8 · Outro -->
+        <section id="s8" class="scene clip" data-start="19.2" data-duration="2" data-track-index="1">
+          <div id="claims">
+            <span class="claim" id="c1">Not cheap.</span>
+            <span class="claim" id="c2">Not overpriced.</span>
+            <span class="claim acc" id="c3">Done right.</span>
+          </div>
+        </section>
+
+        <!-- 9 · Lockup -->
+        <section id="s9" class="scene clip" data-start="21.2" data-duration="1.8" data-track-index="1">
+          <div id="lockup">
+            <div id="lock-name">Raymundo</div>
+            <span id="lock-rule"></span>
+            <div id="lock-cta">Message me — <b>let’s build it →</b></div>
+          </div>
+        </section>
+      </div>
+
+
+      <!-- audio -->
+      <audio id="a-pad" src="assets/audio/pad.mp3" data-start="0" data-duration="23" data-volume="0.9"></audio>
+      <audio id="a-hit1" src="assets/audio/impact-bass-1.mp3" data-start="0" data-duration="2.1" data-volume="0.55"></audio>
+      <audio id="a-click1" src="assets/audio/click-soft.mp3" data-start="2" data-duration="0.36" data-volume="0.5"></audio>
+      <audio id="a-whoosh1" src="assets/audio/whoosh-short.mp3" data-start="3.2" data-duration="0.57" data-volume="0.45"></audio>
+      <audio id="a-click2" src="assets/audio/click-soft.mp3" data-start="5.3" data-duration="0.36" data-volume="0.5"></audio>
+      <audio id="a-riser" src="assets/audio/riser.mp3" data-start="6.6" data-duration="2.6" data-media-start="1.6" data-volume="0.4"></audio>
+      <audio id="a-hit2" src="assets/audio/impact-bass-2.mp3" data-start="9.2" data-duration="2.5" data-volume="0.7" data-fade-out="0.6"></audio>
+      <audio id="a-whoosh2" src="assets/audio/whoosh-short.mp3" data-start="11.95" data-duration="0.57" data-volume="0.3"></audio>
+      <audio id="a-whoosh3" src="assets/audio/whoosh-short.mp3" data-start="14.35" data-duration="0.57" data-volume="0.3"></audio>
+      <audio id="a-whoosh4" src="assets/audio/whoosh-short.mp3" data-start="16.75" data-duration="0.57" data-volume="0.3"></audio>
+      <audio id="a-swell" src="assets/audio/whoosh-cinematic.mp3" data-start="18.6" data-duration="3" data-media-start="1.8" data-volume="0.35" data-fade-out="0.8"></audio>
+      <audio id="a-hit3" src="assets/audio/impact-bass-1.mp3" data-start="21.2" data-duration="1.8" data-volume="0.4" data-fade-out="0.8"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const E = "power3.out";
+
+      // split a word into glyph spans so the "tracking settles" effect is pure transforms
+      function splitGlyphs(sel) {
+        const el = document.querySelector(sel);
+        const txt = el.textContent;
+        el.textContent = "";
+        return Array.from(txt).map((ch) => {
+          const g = document.createElement("span");
+          g.className = "glyph";
+          g.textContent = ch;
+          el.appendChild(g);
+          return g;
+        });
+      }
+      function spreadIn(sel, t0, spread, dur) {
+        const glyphs = splitGlyphs(sel);
+        const mid = (glyphs.length - 1) / 2;
+        glyphs.forEach((g, i) => {
+          tl.fromTo(g, { x: (i - mid) * spread, opacity: 0 }, { x: 0, opacity: 1, duration: dur, ease: "expo.out" }, t0 + Math.abs(i - mid) * 0.03);
+        });
+      }
+
+      // ambient: glow breath + slow camera push across the whole piece
+      tl.fromTo("#glow", { scale: 0.9, opacity: 0.7 }, { scale: 1.08, opacity: 1, duration: 11.5, ease: "sine.inOut" }, 0);
+      tl.to("#glow", { scale: 0.95, opacity: 0.8, duration: 11.5, ease: "sine.inOut" }, 11.5);
+      tl.fromTo("#stage", { scale: 1 }, { scale: 1.035, duration: 23, ease: "none" }, 0);
+      tl.fromTo(".corner", { opacity: 0 }, { opacity: 1, duration: 1.2, ease: "sine.out" }, 0.2);
+
+      // 1 · Option A
+      tl.fromTo("#s1-label", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.4, ease: E }, 0.1);
+      tl.fromTo("#s1-head", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 0.2);
+      tl.fromTo("#s1-price", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 0.8);
+      tl.fromTo("#s1-result", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 1.0);
+      tl.fromTo("#s1-strike", { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: "power2.inOut" }, 2.0);
+      tl.to("#s1-result", { color: "#9a9286", duration: 0.3 }, 2.2);
+      tl.to("#s1-in", { opacity: 0, x: -60, duration: 0.3, ease: "power2.in" }, 3.0);
+
+      // 2 · Option B
+      tl.fromTo("#s2-label", { opacity: 0, x: 20 }, { opacity: 1, x: 0, duration: 0.4, ease: E }, 3.4);
+      tl.fromTo("#s2-head", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 3.5);
+      tl.fromTo("#s2-price", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 4.1);
+      tl.fromTo("#s2-result", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 4.3);
+      tl.fromTo("#s2-strike", { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: "power2.inOut" }, 5.3);
+      tl.to("#s2-result", { color: "#9a9286", duration: 0.3 }, 5.5);
+      tl.to("#s2-in", { opacity: 0, x: 60, duration: 0.3, ease: "power2.in" }, 6.3);
+
+      // 3 · The turn
+      tl.fromTo("#s3-minis", { opacity: 0, scale: 1.12 }, { opacity: 1, scale: 1, duration: 0.5, ease: E }, 6.65);
+      tl.to("#s3-minis", { opacity: 0.35, y: -20, duration: 0.5, ease: "power2.inOut" }, 7.4);
+      tl.fromTo("#turn-line", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.9, ease: "expo.out" }, 7.45);
+      tl.to("#s3-minis", { opacity: 0, duration: 0.3 }, 8.7);
+      tl.to("#turn-line", { opacity: 0, scale: 1.04, duration: 0.25, ease: "power2.in" }, 8.95);
+
+      // 4 · Reveal
+      spreadIn("#name", 9.2, 70, 1.3);
+      tl.fromTo("#name-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.9, ease: "expo.inOut" }, 9.6);
+      tl.fromTo("#name-tag", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 10.1);
+      tl.to("#s4-in", { opacity: 0, y: -30, duration: 0.3, ease: "power2.in" }, 11.7);
+
+      // highlight helper
+      function highlight(id, t0) {
+        tl.fromTo(`#${id}-idx`, { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: 0.4, ease: E }, t0 + 0.05);
+        tl.fromTo(`#${id}-head`, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "expo.out" }, t0 + 0.12);
+        tl.to(`#${id} .hl-text, #${id} .hl-vis`, { opacity: 0, duration: 0.22, ease: "power2.in" }, t0 + 2.18);
+      }
+
+      // 5 · every screen
+      highlight("s5", 12);
+      tl.fromTo(["#dev-phone", "#dev-web", "#dev-car"], { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: "back.out(1.4)", stagger: 0.14 }, 12.3);
+
+      // 6 · real AI
+      highlight("s6", 14.4);
+      tl.fromTo(["#chip-1", "#chip-2", "#chip-3"], { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4, ease: E, stagger: 0.1 }, 14.6);
+      tl.fromTo(["#wire-1", "#wire-2", "#wire-3"], { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: "power2.out", stagger: 0.08 }, 15.0);
+      tl.fromTo("#appcard", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 15.3);
+
+      // 7 · shipped
+      highlight("s7", 16.8);
+      tl.fromTo("#term", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 16.95);
+      tl.fromTo(["#tl-0", "#tl-1", "#tl-2", "#tl-3", "#tl-4"], { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.22, ease: "power2.out", stagger: 0.17 }, 17.2);
+      tl.fromTo("#live-dot", { scale: 0.6 }, { scale: 1.25, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 2 }, 18.1);
+
+      // 8 · outro
+      tl.fromTo("#c1", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 19.35);
+      tl.fromTo("#c2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 19.85);
+      tl.fromTo("#c3", { opacity: 0, y: 30, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "expo.out" }, 20.4);
+      tl.to("#claims", { opacity: 0, y: -40, duration: 0.35, ease: "power2.in" }, 21.0);
+      spreadIn("#lock-name", 21.2, 40, 0.9);
+      tl.fromTo("#lock-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: "expo.inOut" }, 21.4);
+      tl.fromTo("#lock-cta", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 21.6);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
